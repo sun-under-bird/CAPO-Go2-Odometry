@@ -2,10 +2,12 @@
 #include <memory>
 #include <functional>
 
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <tf2/LinearMath/Quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h> 
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 //#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp> doesn't work on Ubuntu20.04
+#include <tf2_ros/transform_broadcaster.h>
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <sensor_msgs/msg/imu.hpp>
@@ -15,6 +17,7 @@
 class FusionEstimatorNode : public rclcpp::Node
 {
 public:
+    // 初始化融合估计器、ROS 通信接口和可选的 2D 里程计 TF 广播器。
     FusionEstimatorNode(const rclcpp::NodeOptions &options)
     : Node("fusion_estimator_node", options)
     {        
@@ -33,7 +36,8 @@ public:
         this->get_parameter_or("pub_odom2d_topic", pub_odom_2d_topic, std::string("NoYamlRead/Odom_2D"));
         this->get_parameter_or("odom_frame", odom_frame_id, std::string("odom"));
         this->get_parameter_or("base_frame", child_frame_id, std::string("base_link"));
-        this->get_parameter_or("base_frame_2d", child_frame_2d_id, std::string("base_link_2D"));
+        this->get_parameter_or("base_frame_2d", child_frame_2d_id, std::string("base_footprint"));
+        this->get_parameter_or("pub_odom2d_tf_enable", pub_odom2d_tf_enable, true);
 
         this->get_parameter_or("pub_body_joint_marker_enable", pub_body_joint_marker_enable, false);
         this->get_parameter_or("pub_body_joint_marker_topic", pub_body_joint_marker_topic, std::string("body_joint_markers"));
@@ -80,6 +84,9 @@ public:
 
         SMXFE_publisher   = this->create_publisher<nav_msgs::msg::Odometry>(pub_odom_topic, 10);
         SMXFE_2D_publisher= this->create_publisher<nav_msgs::msg::Odometry>(pub_odom_2d_topic, 10);
+
+        if (pub_odom2d_tf_enable)
+            odom2d_tf_broadcaster = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
         if (pub_body_joint_marker_enable)
             body_joint_marker_publisher = this->create_publisher<visualization_msgs::msg::MarkerArray>(pub_body_joint_marker_topic, 10);
@@ -158,6 +165,7 @@ private:
     std::string odom_frame_id, child_frame_id, child_frame_2d_id, pub_body_joint_marker_topic;
 
     bool imu_data_enable, leg_pos_enable, leg_vel_enable, leg_ori_enable, slope_mode_enable, pub_body_joint_marker_enable;
+    bool pub_odom2d_tf_enable;
     bool msg_received[2] = {0,0};
 
     double robot_type_id, contact_sensor_threshold, foot_force_threshold, min_stair_height;
@@ -167,6 +175,7 @@ private:
     rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr joystick_cmd_sub;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr SMXFE_publisher, SMXFE_2D_publisher;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr body_joint_marker_publisher;
+    std::unique_ptr<tf2_ros::TransformBroadcaster> odom2d_tf_broadcaster;
 
     void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg)
     {
@@ -388,6 +397,20 @@ private:
         body_joint_marker_publisher->publish(markers);
     }
 
+    // 使用与 2D 里程计完全一致的时间戳和位姿广播 odom 到 base_footprint。
+    void Odom2DTfPublish()
+    {
+        geometry_msgs::msg::TransformStamped transform;
+        transform.header = SMXFE_odom_2D.header;
+        transform.child_frame_id = SMXFE_odom_2D.child_frame_id;
+        transform.transform.translation.x = SMXFE_odom_2D.pose.pose.position.x;
+        transform.transform.translation.y = SMXFE_odom_2D.pose.pose.position.y;
+        transform.transform.translation.z = SMXFE_odom_2D.pose.pose.position.z;
+        transform.transform.rotation = SMXFE_odom_2D.pose.pose.orientation;
+        odom2d_tf_broadcaster->sendTransform(transform);
+    }
+
+    // 成对发布 3D/2D 里程计，并按配置同步广播 2D TF。
     void Msg_Publish()
     {
         if (!msg_received[0] || !msg_received[1])
@@ -398,6 +421,8 @@ private:
         // 发布 odometry 消息
         SMXFE_publisher->publish(SMXFE_odom);
         SMXFE_2D_publisher->publish(SMXFE_odom_2D);
+        if (pub_odom2d_tf_enable)
+            Odom2DTfPublish();
         if(pub_body_joint_marker_enable)
             BodyJointMarkerPublish();
     }
@@ -414,6 +439,7 @@ private:
     }
 };
 
+// 启动融合估计节点，并默认加载当前 Go2 上的 CAPO 参数文件。
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
@@ -423,7 +449,7 @@ int main(int argc, char ** argv)
     .automatically_declare_parameters_from_overrides(true)
     .arguments({
         "--ros-args",
-        "--params-file", "/workspace/LeggedRobot/src/CAPO-LeggedRobotOdometry/config.yaml"
+        "--params-file", "/root/CAPO-LeggedRobotOdometry/config.yaml"
     });
 
   auto node = std::make_shared<FusionEstimatorNode>(options);

@@ -131,7 +131,8 @@ The table below lists the main parameters used by the ROS2 node. See `config.yam
 | `pub_odom2d_topic` | `SMX/Odom_2D` | planar odometry output |
 | `odom_frame` | `odom` | odometry frame |
 | `base_frame` | `base_link` | body frame |
-| `base_frame_2d` | `base_link_2D` | planar body frame |
+| `base_frame_2d` | `base_footprint` | planar body frame |
+| `pub_odom2d_tf_enable` | `true` | publish the `odom -> base_footprint` TF from planar odometry |
 | `imu_data_enable` | `true` | enable IMU input |
 | `leg_pos_enable` | `true` | enable leg-position kinematics |
 | `leg_vel_enable` | `true` | enable leg-velocity kinematics |
@@ -161,6 +162,38 @@ source install/setup.bash
 ros2 run fusion_estimator fusion_estimator_node
 ```
 
+### Run directly on this Go2 (`/lowstate` adapter)
+
+This checkout is configured for `/root/CAPO-LeggedRobotOdometry` on a Unitree Go2
+running Ubuntu 22.04 and ROS 2 Humble. The adapter converts the existing
+`unitree_go/msg/LowState` topic into the two CAPO input topics and throttles the
+robot's roughly 500 Hz low-state stream to the estimator's 200 Hz model interval.
+
+```bash
+source /opt/ros/humble/setup.bash
+source /root/unitree_ros2/cyclonedds_ws/install/setup.bash
+source <your_colcon_workspace>/install/setup.bash
+ros2 launch fusion_estimator go2_capo.launch.py
+```
+
+The adapter reorders Unitree's `FR, FL, RR, RL` motor/foot sequence to CAPO's
+`FL, FR, RL, RR` sequence, inserts zero-valued wheel slots, and publishes the
+contact sensor values in `data[34, 38, 42, 46]`.
+
+To launch CAPO together with this Go2 driver's
+`/root/stereo/src/go2_driver/launch/driver.launch.py`:
+
+```bash
+source /root/stereo/install/setup.bash
+source <your_colcon_workspace>/install/setup.bash
+ros2 launch fusion_estimator go2_capo_with_driver.launch.py
+```
+
+The CAPO 2D odometry uses `odom` as `header.frame_id` and `base_footprint` as
+`child_frame_id`, and CAPO publishes the matching `odom -> base_footprint` TF.
+The driver owns `base_footprint -> base_link`, so the two nodes form a complete
+TF chain without publishing the same transform.
+
 
 ## 📑 ROS 2 Interfaces
 
@@ -168,7 +201,8 @@ ros2 run fusion_estimator fusion_estimator_node
 /fusion_estimator_node (rclcpp)
 ├─ Publishes
 │   • SMX/Odom         nav_msgs/Odometry (odom → base_link)
-│   • SMX/Odom_2D      nav_msgs/Odometry (odom → base_link_2D)
+│   • SMX/Odom_2D      nav_msgs/Odometry (odom → base_footprint)
+│   • /tf              tf2_msgs/TFMessage (odom → base_footprint)
 ├─ Subscribes
 │   • SMX/Go2IMU       sensor_msgs/Imu
 │   • SMX/Go2Joint     std_msgs/Float64MultiArray
@@ -179,7 +213,7 @@ ros2 run fusion_estimator fusion_estimator_node
 │   • SMX/SportCmd     std_msgs/Float64MultiArray
 │       reset example:
 │         data[0] == 25140000  → estimator reset
-└─ TF is typically published by another node / utility if needed
+└─ The driver publishes the next TF edge: base_footprint → base_link
 ```
 
 ---

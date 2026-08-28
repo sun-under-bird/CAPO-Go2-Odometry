@@ -127,7 +127,8 @@ CAPO-LeggedRobotOdometry/
 | `pub_odom2d_topic` | `SMX/Odom_2D` | 平面里程计输出 |
 | `odom_frame` | `odom` | 里程计坐标系 |
 | `base_frame` | `base_link` | 机体坐标系 |
-| `base_frame_2d` | `base_link_2D` | 平面机体坐标系 |
+| `base_frame_2d` | `base_footprint` | 平面机体坐标系 |
+| `pub_odom2d_tf_enable` | `true` | 是否发布 `odom -> base_footprint` TF |
 | `imu_data_enable` | `true` | 是否启用 IMU |
 | `leg_pos_enable` | `true` | 是否启用腿部位置运动学 |
 | `leg_vel_enable` | `true` | 是否启用腿部速度运动学 |
@@ -157,13 +158,43 @@ source install/setup.bash
 ros2 run fusion_estimator fusion_estimator_node
 ```
 
+### 在当前 Go2 上直接运行（`/lowstate` 适配）
+
+当前代码已经适配 `/root/CAPO-LeggedRobotOdometry`、Ubuntu 22.04 和 ROS 2 Humble。
+新增适配节点会把现有的 `unitree_go/msg/LowState` 转换为 CAPO 所需的两个输入 Topic，
+并将 Go2 约 500 Hz 的 LowState 降采样到估计器固定模型步长对应的 200 Hz。
+
+```bash
+source /opt/ros/humble/setup.bash
+source /root/unitree_ros2/cyclonedds_ws/install/setup.bash
+source <你的colcon工作空间>/install/setup.bash
+ros2 launch fusion_estimator go2_capo.launch.py
+```
+
+适配节点会将 Unitree 的 `FR、FL、RR、RL` 腿序重排为 CAPO 的 `FL、FR、RL、RR`，
+补齐值为零的轮电机槽，并把足端接触值写入 `data[34、38、42、46]`。
+
+如需和当前 Go2 driver 的
+`/root/stereo/src/go2_driver/launch/driver.launch.py` 一起启动：
+
+```bash
+source /root/stereo/install/setup.bash
+source <你的colcon工作空间>/install/setup.bash
+ros2 launch fusion_estimator go2_capo_with_driver.launch.py
+```
+
+CAPO 2D 里程计的 `header.frame_id` 为 `odom`，`child_frame_id` 为
+`base_footprint`，并同步发布 `odom -> base_footprint` TF。driver 负责下一段
+`base_footprint -> base_link`，两者共同组成完整 TF 链且不会重复发布同一变换。
+
 ## 📑 节点接口
 
 ```text
 /fusion_estimator_node (rclcpp)
 ├─ 发布
 │   • SMX/Odom         nav_msgs/Odometry (odom → base_link)
-│   • SMX/Odom_2D      nav_msgs/Odometry (odom → base_link_2D)
+│   • SMX/Odom_2D      nav_msgs/Odometry (odom → base_footprint)
+│   • /tf              tf2_msgs/TFMessage (odom → base_footprint)
 ├─ 订阅
 │   • SMX/Go2IMU       sensor_msgs/Imu
 │   • SMX/Go2Joint     std_msgs/Float64MultiArray
@@ -174,7 +205,7 @@ ros2 run fusion_estimator fusion_estimator_node
 │   • SMX/SportCmd     std_msgs/Float64MultiArray
 │       复位示例：
 │         data[0] == 25140000  → 复位估计器
-└─ 若需要 TF，一般由其他节点 / 工具单独发布
+└─ driver 继续发布下一段 TF：base_footprint → base_link
 ```
 
 ---

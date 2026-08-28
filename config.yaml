@@ -1,7 +1,7 @@
 fusion_estimator_node:
   ros__parameters:
     # 98.0~Unitree Go2W; 99.0~Unitree Go2;
-    RobotType: 98.0
+    RobotType: 99.0
 
     # subscribe sensor topics
     sub_imu_topic: "SMX/Go2IMU"  # msg type: sensor_msgs::msg::Imu
@@ -33,10 +33,13 @@ fusion_estimator_node:
 
     # child_frame_id for Odometry Topic
     base_frame: "base_link"
-    base_frame_2d: "base_link_2D"
+    base_frame_2d: "base_footprint"
+
+    # 同步广播 odom -> base_footprint，位姿与 SMX/Odom_2D 完全一致。
+    pub_odom2d_tf_enable: true
 
     # publish joint link marker array (rviz)
-    pub_body_joint_marker_enable: true
+    pub_body_joint_marker_enable: false
     pub_body_joint_marker_topic: "SMX/Joints_Marker"
 
     # IMU enable
@@ -47,8 +50,20 @@ fusion_estimator_node:
     # yaw drift correct enable, which might decrease position estimation accuracy but avoid yaw drift during long-term standing
     leg_ori_enable: false
     # wheel-legged dog slope mode enable, which might decrease stair-climbing height estimation accuracy
-    slope_mode_enable: true
+    slope_mode_enable: false
 
     contact_sensor_threshold: 20.0  # set this if you use contact sensor, or use 0.0, suggest 20.0 for unitree Go2
-    foot_force_threshold:    -30.0  # set 0.0  if you use contact sensor, or modify it. suggest -30.0 for unitree Go2W
+    foot_force_threshold:      0.0  # Go2 直接使用 foot_force 接触传感器时设为 0.0
     min_stair_height: 0.08
+
+go2_lowstate_adapter_node:
+  ros__parameters:
+    # 当前 Go2 已由 unitree_ros2 提供 /lowstate，无需重复连接 DDS。
+    sub_lowstate_topic: "/lowstate"
+    pub_imu_topic: "SMX/Go2IMU"
+    pub_joint_topic: "SMX/Go2Joint"
+    imu_frame: "base_imu"
+
+    # /lowstate 实测约 500 Hz；CAPO 模型固定步长为 5 ms，因此降采样到 200 Hz。
+    publish_rate_hz: 200.0
+    use_estimated_foot_force: false
