@@ -1,331 +1,74 @@
-# CAPO-LeggedRobotOdometry 🦾  [![License](https://img.shields.io/badge/License-See%20LICENSE-blue.svg)](LICENSE)
+# CAPO-Go2-Odometry
 
-Chinese version readme.md is in contributting.md.
+面向当前 Unitree Go2 的 CAPO 足式里程计 ROS 2 Humble 适配版本。
 
-**CAPO-LeggedRobotOdometry** is a **pure proprioceptive odometry library** for legged robots, implemented with a **portable C++ estimator core** that depends only on **IMU and joint motor data**.
+本仓库基于原项目
+[ShineMinxing/CAPO-LeggedRobotOdometry](https://github.com/ShineMinxing/CAPO-LeggedRobotOdometry)
+修改，保留运行所需的纯 C++ 融合核心，新增 `/lowstate` 适配节点、Go2 启动文件和
+`odom -> base_footprint` TF 广播。
 
-The core estimation logic is implemented in **`FusionEstimator/fusion_estimator.h`**. The file **`fusion_estimator_node.cpp`** provides a **ROS 2 wrapper** around this estimator, while the **`Matlab/`** folder contains examples for **MATLAB + C++ mixed compilation** and offline evaluation.
+## 环境
 
-For side-by-side comparison, **`Matlab/Comparison/invariant-ekf/`** provides a MATLAB mixed-compilation workflow for **`invariant-ekf`**, making it easier to compare this repository against a representative open-source legged odometry baseline.
+- Ubuntu 22.04
+- ROS 2 Humble
+- Unitree `unitree_go/msg/LowState`
+- 当前路径：`/root/CAPO-LeggedRobotOdometry`
+- 当前编译工作空间：`/root/capo_ws`
 
-In 3D closed-loop trials (a **200 m** horizontal and **15 m** vertical loop), Astrall point-foot robot A achieves **0.1638 m** horizontal error and **0.219 m** vertical error; for wheel-legged robot B, the corresponding errors are **0.2264 m** and **0.199 m**.
+## 接口
 
-Welcome to add my wechat 401435318 and join a wechat group.
+输入：
 
----
+- `/lowstate`：`unitree_go/msg/LowState`
 
-## 📄 Paper
+输出：
 
-**Contact-Anchored Proprioceptive Odometry for Quadruped Robots** (arXiv:2602.17393)
+- `SMX/Odom`：3D `nav_msgs/msg/Odometry`
+- `SMX/Odom_2D`：2D `nav_msgs/msg/Odometry`
+- `/tf`：`odom -> base_footprint`
 
-* Paper: https://arxiv.org/abs/2602.17393
+Go2 driver 继续广播 `base_footprint -> base_link`。
 
-If you use this repository in research, please consider citing the paper.
-
----
-
-## 📦 Data Sharing (Go2-EDU ROS bags)
-
-To help readers quickly validate the pipeline, we provide **Go2-EDU trial datasets**, including **real-world videos**, derived CSV files, and the corresponding **ROS bag topics/messages** required by this node, enabling fast reproduction and sanity checks.
-
-* Download (GitHub Releases): https://github.com/ShineMinxing/CAPO-LeggedRobotOdometry/releases/tag/DataForTest
-* Recommended assets in that release include `GO2Flat`, `GO2Stairs`, `MPXY150Z10`, `MWXY150Z10`, `robot_flat_1_compress.zip`, and `robot_stairs_1_compress.zip`
-
-> Note: the IMU on this Go2-EDU platform exhibits **noticeable yaw drift**, so the odometry accuracy is generally **worse than** the results reported for Astrall robots A and B in the paper.
-
----
-
-## ✨ Key Features
-
-| Category | Description |
-| --- | --- |
-| **Biped / Quadruped / Wheel-Legged Unified** | Online contact-set switching; stance legs are detected automatically, supporting fast transitions between standing and walking. |
-| **IMU + Joint-Motor Only** | The estimator core works with only IMU and joint motor measurements, without requiring cameras or LiDAR. |
-| **MATLAB / C++ Mixed Compilation** | The `Matlab/` folder provides MATLAB + MEX examples for calling the same C++ core, and `Matlab/Comparison/invariant-ekf/` includes a comparable mixed-compilation setup for `invariant-ekf`. |
-| **Full 3D & Planar 2D** | Publishes both 6DoF odometry (`SMX/Odom`) and a gravity-flattened 2D odometry (`SMX/Odom_2D`). |
-| **Portable Pure C++ Core** | The estimator core is isolated in `FusionEstimator/`, making it easier to reuse outside ROS2. |
-| **Runtime Tuning** | Key parameters can be adjusted through `config.yaml`, and platform-dependent thresholds can be tuned for different robots. |
-
----
-
-## 🏗️ Related Repositories
-
-| Scope | Repository | Summary |
-| --- | --- | --- |
-| **Low-level / Drivers** | https://github.com/ShineMinxing/Ros2Go2Base | DDS bridge, Unitree SDK2 control, pointcloud→LaserScan, TF utilities |
-| **Odometry** | **CAPO-LeggedRobotOdometry (this repo)** | Pure proprioceptive fusion, publishes `SMX/Odom` / `SMX/Odom_2D` |
-| **SLAM / Mapping** | https://github.com/ShineMinxing/Ros2SLAM | Integrations for Cartographer 3D, KISS-ICP, FAST-LIO2, Point-LIO |
-| **Voice / LLM** | https://github.com/ShineMinxing/Ros2Chat | Offline ASR + OpenAI Chat + TTS |
-| **Vision** | https://github.com/ShineMinxing/Ros2ImageProcess | Camera pipelines, spot / face / drone detection |
-| **Gimbal Tracking** | https://github.com/ShineMinxing/Ros2AmovG1 | Amov G1 gimbal control and tracking |
-| **Tools** | https://github.com/ShineMinxing/Ros2Tools | Bluetooth IMU, joystick mapping, gimbal loop, data logging |
-
-> ⚠️ **Clone as needed.** If you only need state estimation, this repository is sufficient. For mapping, it is natural to pair it with `Ros2SLAM` and `Ros2Go2Base`.
-
----
-
-## 📂 Repository Layout
-
-```text
-CAPO-LeggedRobotOdometry/
-├── CMakeLists.txt
-├── package.xml
-├── config.yaml
-├── fusion_estimator_node.cpp        # ROS2 wrapper around the C++ estimator core
-├── FusionEstimator/                 # portable pure C++ estimator core
-│   ├── Estimators/
-│   ├── fusion_estimator.h           # main estimator entry
-│   ├── LowlevelState.h
-│   ├── SensorBase.cpp
-│   ├── SensorBase.h
-│   ├── Sensor_IMU.cpp
-│   ├── Sensor_IMU.h
-│   ├── Sensor_Legs.cpp
-│   ├── Sensor_Legs.h
-│   └── Readme.md
-├── Matlab/                          # MATLAB + MEX examples for the same C++ core
-│   ├── build_mex.m
-│   ├── fusion_estimator.m
-│   ├── fusion_estimator_mex.cpp
-│   ├── Comparison/
-│   │   └── invariant-ekf/           # MATLAB mixed-compilation workflow for invariant-ekf
-│   └── ...                          # optional test datasets are published via GitHub Releases
-├── Plotjuggler.xml
-└── Readme.md
-
-```
----
-
-## 🧩 Architecture Notes
-
-This repository is intentionally split into three layers:
-
-### 1. Estimator core
-The actual odometry algorithm is implemented in **`FusionEstimator/fusion_estimator.h`** and the accompanying files under **`FusionEstimator/`**.  
-This is the **main pure C++ proprioceptive estimator core**, designed to work with only **IMU and joint motor data**.
-
-### 2. ROS2 wrapper
-**`fusion_estimator_node.cpp`** wraps the estimator core into a ROS 2 node, handling:
-
-* ROS2 topic subscriptions
-* parameter loading
-* message conversion
-* odometry publication
-
-### 3. MATLAB mixed-compilation support
-The **`Matlab/`** folder provides examples for compiling and calling the same C++ estimator core from MATLAB via MEX.  
-In addition, **`Matlab/Comparison/invariant-ekf/`** provides a comparable MATLAB mixed-compilation workflow for **`invariant-ekf`**, which is useful for offline benchmarking and side-by-side evaluation.
-
----
-
-## ⚙️ Configuration (`config.yaml`)
-
-The table below lists the main parameters used by the ROS2 node. See `config.yaml` for the full file and comments.
-
-| Parameter | Typical Value | Meaning |
-| --- | ---: | --- |
-| `sub_imu_topic` | `SMX/Go2IMU` | IMU topic |
-| `sub_joint_topic` | `SMX/Go2Joint` | joint state topic |
-| `sub_mode_topic` | `SMX/SportCmd` | reset / mode topic |
-| `pub_odom_topic` | `SMX/Odom` | 6DoF odometry output |
-| `pub_odom2d_topic` | `SMX/Odom_2D` | planar odometry output |
-| `odom_frame` | `odom` | odometry frame |
-| `base_frame` | `base_link` | body frame |
-| `base_frame_2d` | `base_footprint` | planar body frame |
-| `pub_odom2d_tf_enable` | `true` | publish the `odom -> base_footprint` TF from planar odometry |
-| `imu_data_enable` | `true` | enable IMU input |
-| `leg_pos_enable` | `true` | enable leg-position kinematics |
-| `leg_vel_enable` | `true` | enable leg-velocity kinematics |
-| `leg_ori_enable` | `false` | enable kinematics-based yaw correction |
-| `contact_sensor_threshold` | `20.0` | threshold for converting contact-sensor values into contact-related motor torque |
-| `foot_force_threshold` | `-30.0` | foot equivalent-force threshold used for contact detection |
-| `min_stair_height` | `0.08` | minimum stair-height hypothesis used by the estimator |
-
-> Notes:
-> * The exact values are platform-dependent.
-> * Some fields in `config.yaml` may be experimental, legacy, or intended for specific branches / workflows.
-> * If you port only the pure C++ core, you usually need to keep only the estimator-relevant fields and can drop ROS2-specific naming.
-
----
-
-## ⚙️ Build & Run
-
-### Clone the repository
-
-```bash
-mkdir -p ~/ros2_ws/src
-cd ~/ros2_ws/src
-git clone --depth 1 https://github.com/ShineMinxing/CAPO-LeggedRobotOdometry.git
-cd ~/ros2_ws
-colcon build --packages-select fusion_estimator
-source install/setup.bash
-ros2 run fusion_estimator fusion_estimator_node
-```
-
-### Run directly on this Go2 (`/lowstate` adapter)
-
-This checkout is configured for `/root/CAPO-LeggedRobotOdometry` on a Unitree Go2
-running Ubuntu 22.04 and ROS 2 Humble. The adapter converts the existing
-`unitree_go/msg/LowState` topic into the two CAPO input topics and throttles the
-robot's roughly 500 Hz low-state stream to the estimator's 200 Hz model interval.
+## 编译
 
 ```bash
 source /opt/ros/humble/setup.bash
 source /root/unitree_ros2/cyclonedds_ws/install/setup.bash
-source <your_colcon_workspace>/install/setup.bash
+
+colcon build \
+  --base-paths /root/CAPO-LeggedRobotOdometry \
+  --build-base /root/capo_ws/build \
+  --install-base /root/capo_ws/install \
+  --packages-select fusion_estimator \
+  --cmake-args -DCMAKE_BUILD_TYPE=Release
+```
+
+## 启动
+
+只启动 CAPO 和 `/lowstate` 适配器：
+
+```bash
+source /opt/ros/humble/setup.bash
+source /root/unitree_ros2/cyclonedds_ws/install/setup.bash
+source /root/capo_ws/install/setup.bash
 ros2 launch fusion_estimator go2_capo.launch.py
 ```
 
-The adapter reorders Unitree's `FR, FL, RR, RL` motor/foot sequence to CAPO's
-`FL, FR, RL, RR` sequence, inserts zero-valued wheel slots, and publishes the
-contact sensor values in `data[34, 38, 42, 46]`.
-
-To launch CAPO together with this Go2 driver's
-`/root/stereo/src/go2_driver/launch/driver.launch.py`:
+与当前 Go2 driver 一起启动：
 
 ```bash
+source /opt/ros/humble/setup.bash
+source /root/unitree_ros2/cyclonedds_ws/install/setup.bash
 source /root/stereo/install/setup.bash
-source <your_colcon_workspace>/install/setup.bash
+source /root/capo_ws/install/setup.bash
 ros2 launch fusion_estimator go2_capo_with_driver.launch.py
 ```
 
-The CAPO 2D odometry uses `odom` as `header.frame_id` and `base_footprint` as
-`child_frame_id`, and CAPO publishes the matching `odom -> base_footprint` TF.
-The driver owns `base_footprint -> base_link`, so the two nodes form a complete
-TF chain without publishing the same transform.
+## 验证
 
-
-## 📑 ROS 2 Interfaces
-
-```text
-/fusion_estimator_node (rclcpp)
-├─ Publishes
-│   • SMX/Odom         nav_msgs/Odometry (odom → base_link)
-│   • SMX/Odom_2D      nav_msgs/Odometry (odom → base_footprint)
-│   • /tf              tf2_msgs/TFMessage (odom → base_footprint)
-├─ Subscribes
-│   • SMX/Go2IMU       sensor_msgs/Imu
-│   • SMX/Go2Joint     std_msgs/Float64MultiArray
-│       layout:
-│         data[0..15]   = 16 motor positions q
-│         data[16..31]  = 16 motor velocities dq
-│         data[32..47]  = 16 estimated motor torques tau
-│   • SMX/SportCmd     std_msgs/Float64MultiArray
-│       reset example:
-│         data[0] == 25140000  → estimator reset
-└─ The driver publishes the next TF edge: base_footprint → base_link
+```bash
+ros2 topic hz /SMX/Odom_2D
+ros2 run tf2_ros tf2_echo odom base_footprint
 ```
 
----
-
-## 🧠 Algorithm Overview (High Level)
-
-1. **Contact detection**  
-   Detect stance legs from force / threshold logic.
-
-2. **Forward kinematics**  
-   Compute foot-end position / velocity in the body frame from joint measurements.
-
-3. **Contact anchoring**  
-   Record touchdown footfall points and use them as intermittent world-frame constraints during stance.
-
-4. **Height stabilization**  
-   Use support-plane height logic and confidence decay to reduce long-horizon elevation drift.
-
-5. **Optional IKVel-CKF (CAPO-CKE)**  
-   Suppress encoder-induced velocity spikes and obtain smoother leg-end velocity estimates.
-
-6. **Optional yaw stabilization**  
-   Use multi-contact geometric consistency to reduce IMU yaw drift during prolonged standing.
-
-7. **2D projection**  
-   Publish a planar odometry (`SMX/Odom_2D`) by flattening roll / pitch while preserving yaw and planar motion.
-
-For full derivations, please refer to the paper.
-
----
-
-## 🔧 Reusing `FusionEstimator/` Outside ROS2
-
-If you do **not** need ROS2, the reusable part is mainly under `FusionEstimator/`.
-
-A typical migration path is:
-
-1. keep the estimator core in `FusionEstimator/`
-2. replace ROS2 message subscriptions with your own sensor interface
-3. prepare IMU, joint position / velocity, and contact / force inputs
-4. call the estimator core from your own loop
-5. export odometry to your target middleware / runtime
-
-This design is useful for:
-
-* ROS1 migration
-* embedded deployment
-* offline replay tools
-* MATLAB / simulation analysis
-* custom robotics middleware
-
----
-
-## 🧪 MATLAB / MEX (Optional)
-
-The **`Matlab/`** folder provides examples for compiling the estimator core into a MATLAB-callable MEX module.
-
-Typical workflow:
-
-```matlab
-cd Matlab
-build_mex
-fusion_estimator
-```
-
-Files in this folder:
-
-* `build_mex.m` — build script for MEX compilation
-* `fusion_estimator_mex.cpp` — MEX bridge wrapping the C++ estimator core
-* `fusion_estimator.m` — MATLAB-side usage / validation example
-* sample CSV files and compressed test datasets — published via GitHub Releases: https://github.com/ShineMinxing/CAPO-LeggedRobotOdometry/releases/tag/DataForTest
-
-For comparison with another representative legged-odometry implementation, Matlab/Comparison/invariant-ekf/ also provides a MATLAB mixed-compilation workflow for invariant-ekf.
-
----
-
-## 📈 Visualization
-
-A `Plotjuggler.xml` file is included in the repository for convenient visualization and debugging with PlotJuggler.
-
-You can use it to inspect:
-
-* odometry outputs
-* IMU-related signals
-* joint / force-related channels
-* estimator behavior during walking, standing, or reset events
-
----
-
-## 🎥 Videos
-
-| Topic | Link |
-| --- | --- |
-| Odometry-only mapping (morphology switching) | [![img](https://i1.hdslb.com/bfs/archive/4f60453cb37ce5e4f593f03084dbecd0fdddc27e.jpg)](https://www.bilibili.com/video/BV1UtQfYJExu) |
-| Indoor walking (0.5%–1% error) | [![img](https://i1.hdslb.com/bfs/archive/10e501bc7a93c77c1c3f41f163526b630b0afa3f.jpg)](https://www.bilibili.com/video/BV18Q9JYEEdn/) |
-| Stair climbing (height error < 5 cm) | [![img](https://i0.hdslb.com/bfs/archive/c469a3dd37522f6b7dcdbdbb2c135be599eefa7b.jpg)](https://www.bilibili.com/video/BV1VV9ZYZEcH/) |
-| Outdoor walking (380 m, 3.3% error) | [![img](https://i0.hdslb.com/bfs/archive/481731d2db755bbe087f44aeb3f48db29c159ada.jpg)](https://www.bilibili.com/video/BV1BhRAYDEsV/) |
-| Voice interaction + navigation | [![img](https://i2.hdslb.com/bfs/archive/5b95c6eda3b6c9c8e0ba4124c1af9f3da10f39d2.jpg)](https://www.bilibili.com/video/BV1HCQBYUEvk/) |
-| Face tracking + laser spot tracking | [![img](https://i0.hdslb.com/bfs/archive/5496e9d0b40915c62b69701fd1e23af7d6ffe7de.jpg)](https://www.bilibili.com/video/BV1faG1z3EFF/) |
-| AR glasses head-following | [![img](https://i1.hdslb.com/bfs/archive/9e0462e12bf77dd9bbe8085d0d809f233256fdbd.jpg)](https://www.bilibili.com/video/BV1pXEdzFECW) |
-| YOLO drone tracking | [![img](https://i1.hdslb.com/bfs/archive/a5ac45ec76ccb7c3fb18de9c6b8df48e8abe2b54.jpg)](https://www.bilibili.com/video/BV18v8xzJE4G) |
-| Gimbal + fixed camera collaboration | [![img](https://i2.hdslb.com/bfs/archive/07ac6082b7efdc2e2d200e18fc8074eec1d9cfba.jpg)](https://www.bilibili.com/video/BV1fTY7z7E5T) |
-| Multiple SLAM integrations | [![img](https://i1.hdslb.com/bfs/archive/f299bafc7486f71e061eb31f9f00347063e1e621.jpg)](https://www.bilibili.com/video/BV1ytMizEEdG) |
-
----
-
-## 📨 Contact
-
-| Email | Affiliation |
-| --- | --- |
-| [sunminxing20@mails.ucas.ac.cn](mailto:sunminxing20@mails.ucas.ac.cn) | Institute of Optics and Electronics, CAS |
-
-> This repository is under active development. Issues and PRs are welcome.
-
----
+算法原理、论文和原始平台实现请参考上游项目。本仓库只维护当前 Go2 运行适配。
