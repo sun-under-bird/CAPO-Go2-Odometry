@@ -57,16 +57,20 @@ MuJoCo Go2 → rt/lowstate → CAPO adapter → CAPO → /SMX/Odom_2D
 | `simulate/src/unitree_sdk2_bridge.h` | (a) LowState 缺 foot_force；(b) 桥接线程直接遍历 mjData->contact 与物理线程无锁并发，行走时偶发段错误 | (a) 新增 `ComputeFootForce()`：只统计足端 geom 与环境(bodyid==0)接触，mj_contactForce 法向分量累加，经 `foot_force_cache_` 缓存填入 LowState/HighState.foot_force；G1 无该字段用 `if constexpr` 编译期裁剪。(b) 接触力计算移到物理线程。另：highstate 填充 base 四元数供 GT 节点使用 |
 | `simulate/src/main.cc` | 物理线程需要调用桥接的力计算 | 全局 `std::atomic` 桥接指针，mj_step 后调 `ComputeFootForce()`（在 AddToHistory 之前） |
 | `example/cpp/gait_go2.cpp` (新增) | 仿真测试需要步态激励 | stand/walk/turn 三模式关节位置控制器：crawl 静步态（FR→RL→FL→RR、摆动占比 0.25）、幅值 2s 淡入、IMU yaw PD 航向闭环、起立 tanh 过渡。PD kp=50/kd=3.5 |
-| `example/cpp/CMakeLists.txt` | 编译新示例 | 增加 gait_go2 目标 |
+| `example/cpp/policy_runner.cpp` (新增) | RL 步态激励（Test 1~5） | NP3O onnx 推理节点：45 维观测组装/历史栈、heading 闭环复刻训练指令、--script 脚本序列/绝对航向、--teleop 键盘遥控、防重入 mutex + onnx 预热。详见 `RL_GAIT_PLAN.md` |
+| `example/cpp/CMakeLists.txt` | 编译新示例 | 增加 gait_go2、policy_runner（onnxruntime）目标 |
+| `unitree_robots/go2/scene.xml` | RL 行走被场景台阶干扰（爬上 1.8m 阶梯后摔落，误诊为策略失稳） | 删除 x=1.2/1.6 挡板与 x=2.3~3.4 阶梯，改纯平地（地形保留在 scene_terrain.xml） |
 | `unitree_robots/go2/scene_terrain.xml` | Test 5 坡道 | 原 28.7° 坡道对位置控制步态不可攀，改为 8° 缓坡置于 +x 正前方 (3.5, 0)；原 (1.5,0) 方台+圆柱挡直行路径，挪至 (1.5, 2.5) |
 
 ## 4. 完整启动顺序
 
 ```bash
-# Terminal 1 —— MuJoCo 仿真（先起，加载 Go2 + 地形）
+# Terminal 1 —— MuJoCo 仿真（先起；平地为默认场景，读 simulate/config.yaml）
 cd ~/unitree_mujoco/simulate/build
-LD_LIBRARY_PATH=/opt/unitree_robotics/lib ./unitree_mujoco -r go2 -s scene_terrain.xml
-# （平地测试用默认 scene.xml，不加 -s）
+export ROS_DOMAIN_ID=1
+LD_LIBRARY_PATH=/opt/unitree_robotics/lib ./unitree_mujoco -r go2
+# 坡道测试才加 -s：./unitree_mujoco -r go2 -s scene_terrain.xml
+# （scene_terrain 含坡道/阶梯/乱石；平地场景已删原版台阶，见 sim_patch/README）
 
 # Terminal 2 —— CAPO 全链（adapter + fusion + GT + evaluator）
 bash ~/CAPO-Go2-Odometry/scripts/run_capo_sim.sh
@@ -75,7 +79,9 @@ bash ~/CAPO-Go2-Odometry/scripts/run_capo_sim.sh
 
 # Terminal 3 —— 步态激励（起立 3s + 行走 duration 秒）
 cd ~/unitree_mujoco/example/cpp/build
+export LD_LIBRARY_PATH=/opt/unitree_robotics/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib
 ./gait_go2 walk 60 1.0        # <mode> <duration_s> [speed] [heading_rad]
+./policy_runner --teleop      # RL 步态键盘遥控（W/S/Q/E/A/D，空格急停）
 
 # Terminal 4 —— rosbag（-o 目录必须不存在；需 source cyclonedds_ws 以识别 unitree_go/msg）
 source ~/unitree_ros2/cyclonedds_ws/install/setup.bash
@@ -103,6 +109,24 @@ timeout 85 ros2 bag record -o ~/capo_bags/<新目录> \
 核心发现：
 - 平地正常行走下 CAPO 精度优秀（3.6%），yaw 一致性极好（RMSE < 0.005 rad）。
 - 异常状态行为：**打滑→欠估**（接触足被假定静止，滑动位移全部丢失）；**摔倒挣扎→过估**（非接触腿乱蹬被积分）。两者互补，均为腿式里程计的固有失效模式，真机上需配合状态监测。
+
+### 5b. RL 步态激励（2026-09-01 增补，对照 crawl 基线）
+
+激励由手工 crawl（`gait_go2`）替换为社区 NP3O RL 行走策略（`policy_runner`，onnx CPU 推理 50Hz），
+CAPO 验证链路一行未改。详见 `RL_GAIT_PLAN.md` 第 9~14 节（含 sim2sim 三大根因）。
+
+| 测试 | RL 步态结果 | crawl 基线 | 结论 |
+|---|---|---|---|
+| Test 1 静止 60s | 漂移 0.039 m，CAPO 漂移 0.008 m，yaw RMSE 0.00026 rad | 漂移 ~0.03 m/300s | 持平，均优秀 |
+| Test 2 直线 | vx=0.5、GT 15.33 m、相对误差 **4.68%**、RMSE 2D 0.120 m、行程比 1.048 | vx≈0.19、GT 16.91 m、相对误差 3.64%、RMSE 2D 0.481 m | RL 速度 2.6 倍下精度相当，瞬时 RMSE 反而减半 |
+| Test 3 原地旋转 | wz 闭环累计 643°，转角比 1.000，误差 0.025 m，yaw RMSE 0.0006 rad | **必摔**（CAPO 过估 16.53 m 假行程） | RL 下由负结果转为通过 |
+| Test 4 矩形闭环 | 25.05 m、终点误差 0.090 m（**0.36%**）、RMSE 2D 0.064 m | 无法完成（无原地转向能力） | 同上 |
+| Test 5 坡道 8° | **全速翻坡成功**（z 0.36→0.65），坡上水平误差均值 0.19 m，全程终点误差 ~4% | 堵死坡底（欠估 63%） | 同上 |
+| Test 6 楼梯 | 未完成（步态侧移耦合/启动呆滞三次尝试失败，jihua.md 可选项） | 未尝试 | 遗留 |
+
+RL 步态下的核心结论：CAPO 在 0.5 m/s 速度、原地转向、矩形闭环、坡道全翻越等动态
+场景下依然全程跟住 GT（终点误差 ≤4.7%，多数 <1%），此前 crawl 的三个负结果
+（Test 3/4/5）全部转正，证明这些负结果源于位置控制步态的机动性限制而非 CAPO 本身。
 
 ## 6. 风险（仿真结论外推真机的限制）
 
