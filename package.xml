@@ -19,6 +19,7 @@
   <depend>tf2_ros</depend>
   <depend>visualization_msgs</depend>
   <depend>unitree_go</depend>
+  <depend>ament_index_cpp</depend>
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>

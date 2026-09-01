@@ -13,6 +13,7 @@
 #include <sensor_msgs/msg/imu.hpp>
 
 #include "FusionEstimator/fusion_estimator.h"
+#include "capo_params.hpp"
 
 class FusionEstimatorNode : public rclcpp::Node
 {
@@ -439,18 +440,23 @@ private:
     }
 };
 
-// 启动融合估计节点，并默认加载当前 Go2 上的 CAPO 参数文件。
+// 启动融合估计节点，并加载 CAPO 参数文件。
+// 参数文件解析优先级（仿真适配，真机行为不变）：见 capo_params.hpp。
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
 
+  std::vector<std::string> node_arguments = {"--ros-args"};
+  const std::string params_file = resolve_params_file();
+  if (!params_file.empty()) {
+    node_arguments.push_back("--params-file");
+    node_arguments.push_back(params_file);
+  }
+
   auto options = rclcpp::NodeOptions()
     .allow_undeclared_parameters(true)
     .automatically_declare_parameters_from_overrides(true)
-    .arguments({
-        "--ros-args",
-        "--params-file", "/root/CAPO-LeggedRobotOdometry/config.yaml"
-    });
+    .arguments(node_arguments);
 
   auto node = std::make_shared<FusionEstimatorNode>(options);
   rclcpp::spin(node);

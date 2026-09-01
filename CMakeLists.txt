@@ -30,6 +30,15 @@ add_executable(go2_lowstate_adapter_node
   go2_lowstate_adapter_node.cpp
 )
 
+# ==== 仿真验证新增（阶段十六/十七）：Ground Truth 发布与误差评估节点 ====
+add_executable(ground_truth_node
+  ground_truth_node.cpp
+)
+
+add_executable(capo_evaluator_node
+  capo_evaluator_node.cpp
+)
+
 target_include_directories(fusion_estimator_node PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/FusionEstimator
@@ -52,11 +61,25 @@ ament_target_dependencies(go2_lowstate_adapter_node
   sensor_msgs
   std_msgs
   unitree_go
+  ament_index_cpp
+)
+
+ament_target_dependencies(ground_truth_node
+  rclcpp
+  nav_msgs
+  unitree_go
+)
+
+ament_target_dependencies(capo_evaluator_node
+  rclcpp
+  nav_msgs
 )
 
 install(TARGETS
   fusion_estimator_node
   go2_lowstate_adapter_node
+  ground_truth_node
+  capo_evaluator_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

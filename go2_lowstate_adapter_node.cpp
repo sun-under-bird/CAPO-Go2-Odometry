@@ -5,11 +5,14 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <unitree_go/msg/low_state.hpp>
+
+#include "capo_params.hpp"
 
 class Go2LowStateAdapterNode : public rclcpp::Node
 {
@@ -147,18 +150,26 @@ private:
     }
 };
 
-// 启动适配节点，并默认加载当前 Go2 上的 CAPO 参数文件。
+// 启动适配节点，并加载 CAPO 参数文件。
+// 参数文件解析优先级（仿真适配，真机行为不变）：
+//   1. 环境变量 CAPO_PARAMS_FILE 显式指定
+//   2. 真机 Go2 上的 /root/CAPO-LeggedRobotOdometry/config.yaml（存在时沿用）
+//   3. 本机仿真时使用 fusion_estimator 包安装目录中的 config/config.yaml
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
 
+    std::vector<std::string> node_arguments = {"--ros-args"};
+    const std::string params_file = resolve_params_file();
+    if (!params_file.empty()) {
+        node_arguments.push_back("--params-file");
+        node_arguments.push_back(params_file);
+    }
+
     auto options = rclcpp::NodeOptions()
         .allow_undeclared_parameters(true)
         .automatically_declare_parameters_from_overrides(true)
-        .arguments({
-            "--ros-args",
-            "--params-file", "/root/CAPO-LeggedRobotOdometry/config.yaml"
-        });
+        .arguments(node_arguments);
 
     auto node = std::make_shared<Go2LowStateAdapterNode>(options);
     rclcpp::spin(node);
