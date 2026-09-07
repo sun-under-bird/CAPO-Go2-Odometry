@@ -18,7 +18,7 @@ def generate_launch_description():
 
     driver_publish_odom_argument = DeclareLaunchArgument(
         "driver_publish_odom",
-        default_value="true",
+        default_value="false",
         description="是否启动会发布 base_footprint 到 base_link TF 的 Go2 driver",
     )
 

@@ -12,8 +12,8 @@
 - Ubuntu 22.04
 - ROS 2 Humble
 - Unitree `unitree_go/msg/LowState`
-- 当前路径：`/root/CAPO-LeggedRobotOdometry`
-- 当前编译工作空间：`/root/capo_ws`
+- 工作空间：`/root/capo_ws`
+- 源码路径：`/root/capo_ws/src/CAPO-LeggedRobotOdometry`
 
 ## 接口
 
@@ -34,11 +34,9 @@ Go2 driver 继续广播 `base_footprint -> base_link`。
 ```bash
 source /opt/ros/humble/setup.bash
 source /root/unitree_ros2/cyclonedds_ws/install/setup.bash
+cd /root/capo_ws
 
 colcon build \
-  --base-paths /root/CAPO-LeggedRobotOdometry \
-  --build-base /root/capo_ws/build \
-  --install-base /root/capo_ws/install \
   --packages-select fusion_estimator \
   --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```

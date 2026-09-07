@@ -1,12 +1,13 @@
 #include <rclcpp/rclcpp.hpp>
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <cmath>
 #include <memory>
 #include <functional>
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <tf2/LinearMath/Quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-//#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp> doesn't work on Ubuntu20.04
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -206,6 +207,7 @@ private:
         msg_received[0] = 1;
     }
 
+    // 功能：接收关节状态并更新融合里程计，将 2D 速度转换到 base_footprint 坐标系后发布。
     void joint_callback(const std_msgs::msg::Float64MultiArray::SharedPtr msg)
     {
         if (imu.timestamp <= 0.0) return; 
@@ -259,15 +261,24 @@ private:
         SMXFE_odom_2D.pose.pose.position.y = proprioception.PositionXYZ[3];
         SMXFE_odom_2D.pose.pose.position.z = 0;
 
-        SMXFE_odom_2D.twist.twist.linear.x = proprioception.PositionXYZ[1];
-        SMXFE_odom_2D.twist.twist.linear.y = proprioception.PositionXYZ[4];
+        // 融合器输出的平面速度位于 odom 世界系，而 Odometry.twist 必须属于 child_frame_id。
+        const double yaw = proprioception.OrientationRPY[6];
+        const double world_velocity_x = proprioception.PositionXYZ[1];
+        const double world_velocity_y = proprioception.PositionXYZ[4];
+        const double cos_yaw = std::cos(yaw);
+        const double sin_yaw = std::sin(yaw);
+        SMXFE_odom_2D.twist.twist.linear.x =
+            cos_yaw * world_velocity_x + sin_yaw * world_velocity_y;
+        SMXFE_odom_2D.twist.twist.linear.y =
+            -sin_yaw * world_velocity_x + cos_yaw * world_velocity_y;
         SMXFE_odom_2D.twist.twist.linear.z = 0;
 
-        q.setRPY(0, 0, proprioception.OrientationRPY[6]);
+        q.setRPY(0, 0, yaw);
         SMXFE_odom_2D.pose.pose.orientation = tf2::toMsg(q);
 
-        SMXFE_odom_2D.twist.twist.angular.x = proprioception.OrientationRPY[1];
-        SMXFE_odom_2D.twist.twist.angular.y = proprioception.OrientationRPY[4];
+        // 2D 里程计只保留绕平面法向的偏航角速度。
+        SMXFE_odom_2D.twist.twist.angular.x = 0;
+        SMXFE_odom_2D.twist.twist.angular.y = 0;
         SMXFE_odom_2D.twist.twist.angular.z = proprioception.OrientationRPY[7];
 
         msg_received[1] = 1;
@@ -439,17 +450,20 @@ private:
     }
 };
 
-// 启动融合估计节点，并默认加载当前 Go2 上的 CAPO 参数文件。
+// 启动融合估计节点，并从 ROS 2 安装目录加载 CAPO 参数文件。
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
 
+  // 使用包索引定位配置，避免工作空间移动后源码绝对路径失效。
+  const auto config_path =
+    ament_index_cpp::get_package_share_directory("fusion_estimator") + "/config/config.yaml";
   auto options = rclcpp::NodeOptions()
     .allow_undeclared_parameters(true)
     .automatically_declare_parameters_from_overrides(true)
     .arguments({
         "--ros-args",
-        "--params-file", "/root/CAPO-LeggedRobotOdometry/config.yaml"
+        "--params-file", config_path
     });
 
   auto node = std::make_shared<FusionEstimatorNode>(options);

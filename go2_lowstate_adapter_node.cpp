@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
@@ -147,17 +148,20 @@ private:
     }
 };
 
-// 启动适配节点，并默认加载当前 Go2 上的 CAPO 参数文件。
+// 启动适配节点，并从 ROS 2 安装目录加载 CAPO 参数文件。
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
 
+    // 使用包索引定位配置，避免工作空间移动后源码绝对路径失效。
+    const auto config_path =
+        ament_index_cpp::get_package_share_directory("fusion_estimator") + "/config/config.yaml";
     auto options = rclcpp::NodeOptions()
         .allow_undeclared_parameters(true)
         .automatically_declare_parameters_from_overrides(true)
         .arguments({
             "--ros-args",
-            "--params-file", "/root/CAPO-LeggedRobotOdometry/config.yaml"
+            "--params-file", config_path
         });
 
     auto node = std::make_shared<Go2LowStateAdapterNode>(options);

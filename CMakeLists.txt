@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -36,6 +37,7 @@ target_include_directories(fusion_estimator_node PRIVATE
 )
 
 ament_target_dependencies(fusion_estimator_node
+  ament_index_cpp
   rclcpp
   sensor_msgs
   std_msgs
@@ -48,6 +50,7 @@ ament_target_dependencies(fusion_estimator_node
 )
 
 ament_target_dependencies(go2_lowstate_adapter_node
+  ament_index_cpp
   rclcpp
   sensor_msgs
   std_msgs

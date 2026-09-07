@@ -117,10 +117,9 @@ void matrix_test()
     print_matrix(detR,"detR");
 
 	matrix_Clear(detR);
-	print_matrix(detR,"detR");
+    print_matrix(detR,"detR");
 
     free_stack(&S);
-    system("pause");
 }
 
 //初始化堆栈 
