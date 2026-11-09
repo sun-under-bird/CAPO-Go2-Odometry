@@ -1,16 +1,18 @@
 #include <rclcpp/rclcpp.hpp>
 #include <memory>
 #include <functional>
+#include <cmath>
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <tf2/LinearMath/Quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-//#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp> doesn't work on Ubuntu20.04
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <algorithm>
 
 #include "FusionEstimator/fusion_estimator.h"
 #include "capo_params.hpp"
@@ -52,6 +54,7 @@ public:
         this->get_parameter_or("contact_sensor_threshold", contact_sensor_threshold, 20.0);
         this->get_parameter_or("foot_force_threshold", foot_force_threshold, -30.0);
         this->get_parameter_or("min_stair_height", min_stair_height, 0.08);
+        this->get_parameter_or("synchronize_joint_imu", synchronize_joint_imu, false);
 
         /* ────────────── Configure estimator status ────────────── */
         double status[100] = {0};
@@ -76,15 +79,54 @@ public:
         status[IndexLegMinStairHeight]           = min_stair_height;
         fe_.fusion_estimator_status(status);
 
+        std::string robot_model;
+        this->get_parameter_or("robot_model", robot_model, std::string("go2"));
+        if (robot_model == "configured_point") {
+            point_robot_mode = true;
+            if (contact_sensor_threshold != 0 || foot_force_threshold >= 0)
+                throw std::invalid_argument("Configured point legs require raw torque and a negative force threshold");
+            std::array<std::vector<double>, 4> chains;
+            const std::array<std::string, 4> legs = {"fl", "fr", "rl", "rr"};
+            for (int i = 0; i < 4; ++i)
+                chains[i] = this->get_parameter("chain_" + legs[i]).as_double_array();
+            fe_.configure_point_robot(chains,
+                this->get_parameter("foot_radii").as_double_array(),
+                this->get_parameter("robot_mass_kg").as_double(),
+                this->get_parameter("gravity_m_s2").as_double(),
+                this->get_parameter("imu_position_body").as_double_array());
+            input_joint_names = this->get_parameter("joint_names").as_string_array();
+            input_joint_slots = this->get_parameter("joint_slots").as_integer_array();
+            if (input_joint_names.size() != 14 || input_joint_slots.size() != 14)
+                throw std::invalid_argument("Expected 14 joint names and motor slots");
+            std::vector<int64_t> checked_slots;
+            std::vector<std::string> checked_names;
+            for (size_t i = 0; i < 14; ++i) {
+                if (input_joint_slots[i] < 0 || input_joint_slots[i] >= 16 ||
+                    std::find(checked_slots.begin(), checked_slots.end(), input_joint_slots[i]) != checked_slots.end() ||
+                    std::find(checked_names.begin(), checked_names.end(), input_joint_names[i]) != checked_names.end())
+                    throw std::invalid_argument("Invalid or duplicate joint mapping");
+                checked_slots.push_back(input_joint_slots[i]);
+                checked_names.push_back(input_joint_names[i]);
+            }
+            RCLCPP_INFO(get_logger(), "Configured 14-axis point robot: shared joints in kinematics only");
+        } else if (robot_model != "go2") {
+            throw std::invalid_argument("Unknown robot_model: " + robot_model);
+        }
+
         /* ────────────── Create ROS communication interfaces ────────────── */
         go2_imu_sub = this->create_subscription<sensor_msgs::msg::Imu>(sub_imu_topic, 10, std::bind(&FusionEstimatorNode::imu_callback, this, std::placeholders::_1));
-        go2_joint_sub = this->create_subscription<std_msgs::msg::Float64MultiArray>(sub_joint_topic, 10, std::bind(&FusionEstimatorNode::joint_callback, this, std::placeholders::_1));
+        if (point_robot_mode)
+            named_joint_sub = this->create_subscription<sensor_msgs::msg::JointState>(
+                sub_joint_topic, 10, std::bind(&FusionEstimatorNode::named_joint_callback, this, std::placeholders::_1));
+        else
+            go2_joint_sub = this->create_subscription<std_msgs::msg::Float64MultiArray>(sub_joint_topic, 10, std::bind(&FusionEstimatorNode::joint_callback, this, std::placeholders::_1));
         joystick_cmd_sub = this->create_subscription<std_msgs::msg::Float64MultiArray>(
             sub_mode_topic, 10,
             std::bind(&FusionEstimatorNode::joystick_cmd_callback, this, std::placeholders::_1));
 
         SMXFE_publisher   = this->create_publisher<nav_msgs::msg::Odometry>(pub_odom_topic, 10);
         SMXFE_2D_publisher= this->create_publisher<nav_msgs::msg::Odometry>(pub_odom_2d_topic, 10);
+        contact_publisher = this->create_publisher<std_msgs::msg::Float64MultiArray>("SMX/ContactEstimate", 10);
 
         if (pub_odom2d_tf_enable)
             odom2d_tf_broadcaster = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
@@ -170,6 +212,15 @@ private:
     bool msg_received[2] = {0,0};
 
     double robot_type_id, contact_sensor_threshold, foot_force_threshold, min_stair_height;
+    bool synchronize_joint_imu = false;
+    bool point_robot_mode = false;
+    std::vector<std::string> input_joint_names;
+    std::vector<int64_t> input_joint_slots;
+    int64_t last_joint_stamp_ns = -1;
+    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr named_joint_sub;
+    int64_t last_imu_stamp_ns = -1;
+    std_msgs::msg::Float64MultiArray::SharedPtr pending_joint;
+    rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr contact_publisher;
     
     rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr go2_imu_sub;
     rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr go2_joint_sub;
@@ -180,16 +231,22 @@ private:
 
     void imu_callback(const sensor_msgs::msg::Imu::SharedPtr msg)
     {
-        rclcpp::Clock ros_clock(RCL_SYSTEM_TIME);
-        rclcpp::Time now = ros_clock.now();
-        rclcpp::Time msg_time(msg->header.stamp, now.get_clock_type());
-
-        if (now > msg_time) SMXFE_odom.header.stamp = now;
-        else                SMXFE_odom.header.stamp = msg_time + rclcpp::Duration(0, 1);
-
+        if (point_robot_mode) {
+            const double values[] = {msg->orientation.w, msg->orientation.x, msg->orientation.y,
+                msg->orientation.z, msg->angular_velocity.x, msg->angular_velocity.y,
+                msg->angular_velocity.z, msg->linear_acceleration.x,
+                msg->linear_acceleration.y, msg->linear_acceleration.z};
+            for (double v : values) if (!std::isfinite(v)) return;
+            const double norm = values[0]*values[0]+values[1]*values[1]+values[2]*values[2]+values[3]*values[3];
+            if (norm < 0.5 || norm > 1.5 || msg->orientation_covariance[0] < 0) return;
+        }
+        // Keep the measurement stamp, including when /clock drives simulation.
+        SMXFE_odom.header.stamp = msg->header.stamp;
         SMXFE_odom_2D.header.stamp = SMXFE_odom.header.stamp;
+        last_imu_stamp_ns = static_cast<int64_t>(msg->header.stamp.sec) * 1000000000LL
+            + msg->header.stamp.nanosec;
 
-        imu.timestamp = static_cast<int64_t>(1e3 * msg->header.stamp.sec + 1e-6 * msg->header.stamp.nanosec);
+        imu.timestamp = last_imu_stamp_ns / 1000000LL;
 
         imu.accelerometer[0] = msg->linear_acceleration.x;
         imu.accelerometer[1] = msg->linear_acceleration.y;
@@ -205,10 +262,66 @@ private:
         imu.quaternion[3] = msg->orientation.z;
 
         msg_received[0] = 1;
+        if (pending_joint) {
+            auto joint = pending_joint;
+            pending_joint.reset();
+            joint_callback(joint);
+        }
+    }
+
+    void named_joint_callback(const sensor_msgs::msg::JointState::SharedPtr msg)
+    {
+        if (msg->name.size() != 14 || msg->position.size() != 14 ||
+            msg->velocity.size() != 14 || msg->effort.size() != 14) {
+            RCLCPP_ERROR(get_logger(), "JointState requires all 14 names/positions/velocities/efforts");
+            return;
+        }
+        auto packed = std::make_shared<std_msgs::msg::Float64MultiArray>();
+        packed->data.assign(48, 0.0);
+        std::array<bool, 14> seen{};
+        for (size_t i = 0; i < 14; ++i) {
+            auto it = std::find(input_joint_names.begin(), input_joint_names.end(), msg->name[i]);
+            if (it == input_joint_names.end()) return;
+            const size_t index = std::distance(input_joint_names.begin(), it);
+            if (seen[index] || !std::isfinite(msg->position[i]) ||
+                !std::isfinite(msg->velocity[i]) || !std::isfinite(msg->effort[i])) return;
+            seen[index] = true;
+            const int slot = input_joint_slots[index];
+            packed->data[slot] = msg->position[i];
+            packed->data[16+slot] = msg->velocity[i];
+            packed->data[32+slot] = msg->effort[i];
+        }
+        const int64_t stamp = static_cast<int64_t>(msg->header.stamp.sec)*1000000000LL + msg->header.stamp.nanosec;
+        packed->layout.dim.resize(1);
+        packed->layout.dim[0].label = "imu_stamp_ns=" + std::to_string(stamp);
+        packed->layout.dim[0].size = packed->layout.dim[0].stride = 48;
+        joint_callback(packed);
     }
 
     void joint_callback(const std_msgs::msg::Float64MultiArray::SharedPtr msg)
     {
+        if (synchronize_joint_imu) {
+            // Float64MultiArray has no header. The bridge supplies the matching
+            // IMU stamp in the first dimension label, without changing its payload.
+            const std::string prefix = "imu_stamp_ns=";
+            if (msg->layout.dim.empty() || msg->layout.dim[0].label.rfind(prefix, 0) != 0) {
+                RCLCPP_ERROR(this->get_logger(), "Synchronized joint input requires imu_stamp_ns label");
+                return;
+            }
+            int64_t joint_stamp;
+            try {
+                joint_stamp = std::stoll(msg->layout.dim[0].label.substr(prefix.size()));
+            } catch (const std::exception &) {
+                RCLCPP_ERROR(this->get_logger(), "Invalid joint IMU stamp");
+                return;
+            }
+            if (joint_stamp <= last_joint_stamp_ns) return;
+            if (joint_stamp > last_imu_stamp_ns) {
+                pending_joint = msg;
+                return;
+            }
+            if (joint_stamp != last_imu_stamp_ns) return;
+        }
         if (imu.timestamp <= 0.0) return; 
         const auto& arr = msg->data;
         const size_t n = arr.size();
@@ -223,6 +336,8 @@ private:
             return;
         }
 
+        for (double value : arr) if (!std::isfinite(value)) return;
+        last_joint_stamp_ns = last_imu_stamp_ns;
         for (int i = 0; i < 16; ++i)
         {
             motorState[i].q      = arr[i];
@@ -239,6 +354,19 @@ private:
         // ---------------- Estimation is triggered only by the joint callback ----------------
         // ---------------- 估计更新只在 joint 回调中触发 ----------------
         proprioception = fe_.fusion_estimator(imu, motorState);
+        std_msgs::msg::Float64MultiArray contacts;
+        contacts.data.resize(12);
+        for (int leg = 0; leg < 4; ++leg) {
+            const double fz = proprioception.JointsBodyWFEffort[leg][3][2];
+            contacts.data[leg] = fz;
+            contacts.data[4 + leg] = fz < foot_force_threshold ? 1.0 : 0.0;
+            contacts.data[8 + leg] = proprioception.FootLandedProbability[leg];
+        }
+        contacts.layout.dim.resize(1);
+        contacts.layout.dim[0].label = "imu_stamp_ns=" + std::to_string(last_imu_stamp_ns);
+        contacts.layout.dim[0].size = 12;
+        contacts.layout.dim[0].stride = 12;
+        contact_publisher->publish(contacts);
 
         SMXFE_odom.pose.pose.position.x = proprioception.PositionXYZ[0];
         SMXFE_odom.pose.pose.position.y = proprioception.PositionXYZ[3];
@@ -251,6 +379,12 @@ private:
         tf2::Quaternion q;
         q.setRPY(proprioception.OrientationRPY[0], proprioception.OrientationRPY[3], proprioception.OrientationRPY[6]);
         SMXFE_odom.pose.pose.orientation = tf2::toMsg(q);
+        // Odometry twist belongs to child_frame_id, while CAPO returns world velocity.
+        const auto body_velocity = tf2::quatRotate(q.inverse(), tf2::Vector3(
+            proprioception.PositionXYZ[1], proprioception.PositionXYZ[4], proprioception.PositionXYZ[7]));
+        SMXFE_odom.twist.twist.linear.x = body_velocity.x();
+        SMXFE_odom.twist.twist.linear.y = body_velocity.y();
+        SMXFE_odom.twist.twist.linear.z = body_velocity.z();
 
         SMXFE_odom.twist.twist.angular.x = proprioception.OrientationRPY[1];
         SMXFE_odom.twist.twist.angular.y = proprioception.OrientationRPY[4];
@@ -266,9 +400,14 @@ private:
 
         q.setRPY(0, 0, proprioception.OrientationRPY[6]);
         SMXFE_odom_2D.pose.pose.orientation = tf2::toMsg(q);
+        const double yaw = proprioception.OrientationRPY[6];
+        SMXFE_odom_2D.twist.twist.linear.x = std::cos(yaw) * proprioception.PositionXYZ[1]
+            + std::sin(yaw) * proprioception.PositionXYZ[4];
+        SMXFE_odom_2D.twist.twist.linear.y = -std::sin(yaw) * proprioception.PositionXYZ[1]
+            + std::cos(yaw) * proprioception.PositionXYZ[4];
 
-        SMXFE_odom_2D.twist.twist.angular.x = proprioception.OrientationRPY[1];
-        SMXFE_odom_2D.twist.twist.angular.y = proprioception.OrientationRPY[4];
+        SMXFE_odom_2D.twist.twist.angular.x = 0;
+        SMXFE_odom_2D.twist.twist.angular.y = 0;
         SMXFE_odom_2D.twist.twist.angular.z = proprioception.OrientationRPY[7];
 
         msg_received[1] = 1;
@@ -431,7 +570,7 @@ private:
     // 回调函数，处理SportCmd消息
     void joystick_cmd_callback(const std_msgs::msg::Float64MultiArray::SharedPtr msg)
     {
-        if (msg->data[0] == 25140000)
+        if (!msg->data.empty() && msg->data[0] == 25140000)
         {
             double status[100] = {0};
             status[IndexInOrOut] = 3;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SensorBase.h"
+#include "PointLegKinematics.h"
 
 namespace DataFusion
 {
@@ -36,6 +37,16 @@ namespace DataFusion
     static constexpr int MAX_PITCH_SUM_JOINT = 8;
     static constexpr int FootNodeIndex = 3;
 
+    void ConfigurePointLeg(int leg, const std::vector<double>& geometry, double radius) {
+      if (leg < 0 || leg >= 4) throw std::invalid_argument("Invalid leg index");
+      PointChains[leg].configure(geometry, radius);
+      ConfiguredPointChain[leg] = true;
+    }
+    bool ConfiguredPointChain[4] = {false, false, false, false};
+    PointLegKinematics PointChains[4];
+    void UpdateContactState(int leg);
+    double GravityMagnitude = 9.79;
+    bool JointsXYZAccelerationEnable = true;
     bool JointsXYZEnable = true;
     bool JointsXYZVelocityEnable = true;
 
@@ -110,7 +121,7 @@ namespace DataFusion
     */
     void UseGo2P()
     {  
-      for (int i = 0; i < MAX_CONTACT_CHAIN; ++i) LegChains_[i] = LegTFChain();
+      for (int i = 0; i < MAX_CONTACT_CHAIN; ++i) { LegChains_[i] = LegTFChain(); ConfiguredPointChain[i] = false; }
 
       Environement_Height_Scope = 0.08;
       FootEffortThreshold = -1.0;
@@ -174,7 +185,7 @@ namespace DataFusion
     */
     void UseGo2W()
     {
-      for (int i = 0; i < MAX_CONTACT_CHAIN; ++i) LegChains_[i] = LegTFChain();
+      for (int i = 0; i < MAX_CONTACT_CHAIN; ++i) { LegChains_[i] = LegTFChain(); ConfiguredPointChain[i] = false; }
 
       Environement_Height_Scope = 0.08;
       FootEffortThreshold = -30.0;
@@ -229,7 +240,7 @@ namespace DataFusion
     
     void UseMW_A()
     {
-      for (int i = 0; i < MAX_CONTACT_CHAIN; ++i) LegChains_[i] = LegTFChain();
+      for (int i = 0; i < MAX_CONTACT_CHAIN; ++i) { LegChains_[i] = LegTFChain(); ConfiguredPointChain[i] = false; }
 
       Environement_Height_Scope = 0.10;
       FootEffortThreshold = -80.0;
@@ -266,7 +277,7 @@ namespace DataFusion
 
     void UseMW_B()
     {
-      for (int i = 0; i < MAX_CONTACT_CHAIN; ++i) LegChains_[i] = LegTFChain();
+      for (int i = 0; i < MAX_CONTACT_CHAIN; ++i) { LegChains_[i] = LegTFChain(); ConfiguredPointChain[i] = false; }
 
       Environement_Height_Scope = 0.04;
       FootEffortThreshold = -85.0;

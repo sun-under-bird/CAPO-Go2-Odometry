@@ -1,0 +1,26 @@
+fusion_estimator_node:
+  ros__parameters:
+    use_sim_time: true
+    RobotType: 99.0
+    robot_model: configured_point
+    sub_imu_topic: marsdog/imu
+    sub_joint_topic: marsdog/joint_states
+    sub_mode_topic: marsdog/estimator_cmd
+    pub_odom_topic: SMX/Odom
+    pub_odom2d_topic: SMX/Odom_2D
+    odom_frame: odom
+    base_frame: base_link
+    base_frame_2d: base_footprint
+    pub_odom2d_tf_enable: true
+    pub_body_joint_marker_enable: false
+    imu_data_enable: true
+    leg_pos_enable: true
+    leg_vel_enable: true
+    leg_ori_enable: false
+    slope_mode_enable: false
+    contact_sensor_threshold: 0.0
+    foot_force_threshold: -8.0
+    min_stair_height: 0.04
+    synchronize_joint_imu: true
+    # The runner supplies chain_*, foot_radii, mass, IMU offset and joint mapping
+    # from the exact compiled simulation model. This template alone is incomplete.

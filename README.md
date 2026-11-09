@@ -1,6 +1,6 @@
 # CAPO-Go2-Odometry
 
-面向当前 Unitree Go2 的 CAPO 足式里程计 ROS 2 Humble 适配版本。
+CAPO 足式里程计 ROS 2 Humble 适配版本，包含 Unitree Go2 流程及 Marsdog V1.7 仿真适配。
 
 本仓库基于原项目
 [ShineMinxing/CAPO-LeggedRobotOdometry](https://github.com/ShineMinxing/CAPO-LeggedRobotOdometry)
@@ -28,6 +28,29 @@
 - `/tf`：`odom -> base_footprint`
 
 Go2 driver 继续广播 `base_footprint -> base_link`。
+
+## 无足端传感器的 MuJoCo 仿真
+
+`sim-torque-reproduction` 分支提供直接使用 IMU、关节位置/速度和实际电机力矩的
+MuJoCo 仿真桥，不需要 `unitree_go` 或 Go2 足端传感器。CAPO 数学核心沿用上游。
+
+```bash
+scripts/setup_torque_sim.sh
+scripts/run_torque_sim.sh --scenario straight --duration 30 --viewer --realtime
+```
+
+完整配置、上游实现依据和本机实测结果见 [关节力矩仿真复现说明](TORQUE_SIM_REPRODUCTION.md)。
+
+## Marsdog V1.7 仿真适配
+
+支持 12 个腿轴和 2 个活动腰轴，使用关节实际执行器力矩和 IMU，在独立构建工作区运行：
+
+```bash
+scripts/setup_marsdog_sim.sh
+scripts/run_marsdog_sim.sh --scenario straight --duration 30 --viewer --realtime
+```
+
+本机运行条件、话题、仿真假设与 30 秒结果见 [Marsdog 适配说明](MARSDOG_SIM_ADAPTATION.md)。
 
 ## 编译
 
@@ -71,4 +94,4 @@ ros2 topic hz /SMX/Odom_2D
 ros2 run tf2_ros tf2_echo odom base_footprint
 ```
 
-算法原理、论文和原始平台实现请参考上游项目。本仓库只维护当前 Go2 运行适配。
+算法原理、论文和原始平台实现请参考上游项目。Marsdog 真机输入与精度尚未验证。

@@ -1,0 +1,26 @@
+fusion_estimator_node:
+  ros__parameters:
+    use_sim_time: true
+    RobotType: 99.0
+    sub_imu_topic: "SMX/Go2IMU"
+    sub_joint_topic: "SMX/Go2Joint"
+    sub_mode_topic: "SMX/SportCmd"
+    pub_odom_topic: "SMX/Odom"
+    pub_odom2d_topic: "SMX/Odom_2D"
+    odom_frame: "odom"
+    base_frame: "base_link"
+    base_frame_2d: "base_footprint"
+    pub_odom2d_tf_enable: true
+    pub_body_joint_marker_enable: false
+    imu_data_enable: true
+    leg_pos_enable: true
+    leg_vel_enable: true
+    leg_ori_enable: false
+    slope_mode_enable: false
+    # Torques in N m in all hip/thigh/calf slots, not contact sensor values.
+    contact_sensor_threshold: 0.0
+    # CAPO's equivalent foot force is negative for a supporting leg (N).
+    # Static equivalent Fz is about -36 N front / -28 N rear in this model.
+    foot_force_threshold: -20.0
+    min_stair_height: 0.08
+    synchronize_joint_imu: true

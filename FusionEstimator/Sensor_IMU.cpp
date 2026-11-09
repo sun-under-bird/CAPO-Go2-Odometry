@@ -19,7 +19,7 @@ namespace DataFusion
       }
           
       ObservationCorrect_Acceleration();
-      Observation[8] -= 9.43;
+      Observation[8] -= GravityMagnitude;
       
       StateSpaceModel_Go2_EstimatorPort(Observation, ObservationTime, StateSpaceModel);
 

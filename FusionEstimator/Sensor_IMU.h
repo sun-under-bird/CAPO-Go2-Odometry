@@ -23,6 +23,7 @@ namespace DataFusion
       SensorPosition[2] = 0;
     }
 
+    double GravityMagnitude = 9.43;
     bool IMUAccEnable = true;
 
     void SensorDataHandle(double* Message, double Time)  override;

@@ -309,6 +309,37 @@ public:
         }
     }
 
+    // Inputs use body axes; extrinsic rotation has already been applied by the adapter.
+    void configure_point_robot(const std::array<std::vector<double>, 4>& chains,
+                               const std::vector<double>& radii, double mass, double gravity,
+                               const std::vector<double>& imu_position) {
+        if (radii.size() != 4 || imu_position.size() != 3 ||
+            !std::isfinite(mass) || mass <= 0 || !std::isfinite(gravity) || gravity <= 0)
+            throw std::invalid_argument("Invalid point-robot calibration");
+        for (int i = 0; i < 4; ++i) legs_pos->ConfigurePointLeg(i, chains[i], radii[i]);
+        for (int a = 0; a < 3; ++a) {
+            if (!std::isfinite(imu_position[a])) throw std::invalid_argument("Invalid IMU offset");
+            imu_position_body[a] = imu_position[a];
+        }
+        for (auto* sensor : {static_cast<DataFusion::Sensors*>(imu_acc.get()),
+                             static_cast<DataFusion::Sensors*>(imu_gyro.get())}) {
+            for (int i = 0; i < 4; ++i) {
+                sensor->SensorQuaternion[i] = i == 0 ? 1.0 : 0.0;
+                sensor->SensorQuaternionInv[i] = sensor->SensorQuaternion[i];
+            }
+        }
+        imu_acc->GravityMagnitude = gravity;
+        legs_pos->GravityMagnitude = gravity;
+        legs_pos->MinimumWeight = mass;
+        legs_pos->TimelyWeight = mass;
+        legs_pos->CalculateWeightEnable = false;
+        legs_pos->GravityCompensateEnable = false;
+        legs_pos->JointsXYZAccelerationEnable = false;
+        legs_ori->JointsRPYAccEnable = false;
+        legs_ori->CollisionDetectEnable = false;
+        point_robot = true;
+    }
+
     Proprioception fusion_estimator(const IMU& imu, const MotorState (&motorState)[MOTOR_NUM])
     {
         Proprioception proprio;
@@ -345,16 +376,32 @@ public:
         double UsedTimestamp = CurrentTimestamp - StartTimeStamp;
         LastUsedTimestamp = UsedTimestamp;
 
-        if (imu_acc->IMUAccEnable) {
+        auto update_acceleration = [&]() {
+            if (!imu_acc->IMUAccEnable) return;
+            double acceleration[3], omega[3], alpha[3] = {0, 0, 0};
+            for (int a = 0; a < 3; ++a) {
+                acceleration[a] = imu.accelerometer[a];
+                omega[a] = imu.gyroscope[a];
+                if (point_robot && previous_gyro_time >= 0 && UsedTimestamp > previous_gyro_time)
+                    alpha[a] = (omega[a] - previous_gyro[a]) / (UsedTimestamp - previous_gyro_time);
+            }
+            if (point_robot) {
+                double tangential[3], centripetal[3], intermediate[3];
+                array_vector_cross(alpha, imu_position_body, tangential);
+                array_vector_cross(omega, imu_position_body, intermediate);
+                array_vector_cross(omega, intermediate, centripetal);
+                for (int a = 0; a < 3; ++a) {
+                    acceleration[a] -= tangential[a] + centripetal[a];
+                    previous_gyro[a] = omega[a];
+                }
+                previous_gyro_time = UsedTimestamp;
+            }
             double msg_acc[9] = {0};
-            msg_acc[3*0 + 2] = static_cast<double>(imu.accelerometer[0]);
-            msg_acc[3*1 + 2] = static_cast<double>(imu.accelerometer[1]);
-            msg_acc[3*2 + 2] = static_cast<double>(imu.accelerometer[2]);
-            
-            if(Signal_Available_Check(msg_acc,0))
-                imu_acc->SensorDataHandle(msg_acc, UsedTimestamp);
-        }
-        
+            for (int a = 0; a < 3; ++a) msg_acc[3*a+2] = acceleration[a];
+            if (Signal_Available_Check(msg_acc, 0)) imu_acc->SensorDataHandle(msg_acc, UsedTimestamp);
+        };
+        if (!point_robot) update_acceleration();
+
         double array_EulerZYX[3] = {0.0, 0.0, 0.0};
         array_quaternion_to_eulerZYX(q, array_EulerZYX);
         double roll = array_EulerZYX[0];
@@ -375,6 +422,7 @@ public:
 
         if(Signal_Available_Check(msg_rpy,1))
             imu_gyro->SensorDataHandle(msg_rpy, UsedTimestamp);
+        if (point_robot) update_acceleration();
         
         if (legs_pos->JointsXYZEnable||legs_pos->JointsXYZVelocityEnable){
             double joint[48];
@@ -442,6 +490,9 @@ private:
     std::shared_ptr<DataFusion::SensorLegsPos>    legs_pos;
     std::shared_ptr<DataFusion::SensorLegsOri>    legs_ori;
 
+    bool point_robot = false;
+    double imu_position_body[3] = {0, 0, 0}, previous_gyro[3] = {0, 0, 0};
+    double previous_gyro_time = -1;
     double LastUsedTimestamp = 0, StartTimeStamp = 0;
     double LastSignal[3][48] = {0};
     int LastSignalMaxIndex[3] = {9,9,48};
@@ -456,7 +507,7 @@ private:
             if (Signal[i] != LastSignal[type][i])
                 diff = true;
         }
-        if(!diff)
+        if(!diff && !point_robot)
             return false;
         else
             for (int i = 0; i < LastSignalMaxIndex[type]; ++i)
