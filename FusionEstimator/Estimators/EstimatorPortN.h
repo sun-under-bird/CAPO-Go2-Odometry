@@ -66,6 +66,10 @@ extern "C" {
 #endif
 
 
+// Int_Par slot reserved for constant-acceleration prediction using sensor time.
+// Zero retains the historical transition matrix for existing robot presets.
+enum { ESTIMATOR_PARAM_TIMESTAMP_TRANSITION = 0 };
+
 typedef struct EstimatorPortN {
 
     char *PortName;

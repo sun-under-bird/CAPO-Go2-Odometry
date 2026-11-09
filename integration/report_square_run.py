@@ -4,6 +4,8 @@ import csv
 import json
 import math
 from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -93,7 +95,8 @@ def main():
     fig.savefig(directory / "square_report.pdf")
     plt.close(fig)
 
-    lines = [f"# Marsdog {length:g} 米方形里程计测试", "", "测试日期：2026-11-09（Asia/Shanghai）。", "",
+    date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+    lines = [f"# Marsdog {length:g} 米方形里程计测试", "", f"报告生成日期：{date}（Asia/Shanghai）。", "",
              "已连续走完四条边，全程没有重置里程计。路线控制使用 MuJoCo 位置和 IMU 航向到达方形路点；CAPO 只接收 IMU 与关节数据。起始位姿只对齐一次，没有尺度拟合或轨迹校正。", "",
              f"目标边长 **{length:.2f} m**，目标周长 **{4*length:.2f} m**。实际累计行程 **{summary['ground_truth_path_m']:.3f} m**（包含转弯位移和步态摆动）；评测时长 **{summary['duration_s']:.2f} 秒**，另有 4 秒预热。", "",
              "| 指标 | 结果 |", "|---|---:|",

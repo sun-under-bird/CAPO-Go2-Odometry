@@ -68,6 +68,18 @@ void Estimator1001_Estimation(EstimatorPortN *estimator)
 {
     Estimator1001_Input(estimator);
 
+    // Workspaces are shared by estimator instances; reload the transition for
+    // this instance before applying its timestamp interval.
+    memcpy(E1001_F->p, estimator->Matrix_F, (size_t)estimator->Nx * estimator->Nx * sizeof(double));
+    const double dt = estimator->ObservationTimestamp - estimator->StateUpdateTimestamp;
+    if (estimator->Int_Par[ESTIMATOR_PARAM_TIMESTAMP_TRANSITION] && estimator->Nx == 3) {
+        const double step = dt > 0.0 ? dt : 0.0;
+        E1001_F->p[1] = step;
+        E1001_F->p[2] = 0.5 * step * step;
+        E1001_F->p[5] = step;
+    }
+    matrix_transpose(E1001_F, E1001_FT);
+
     if(fabs(estimator->StateUpdateTimestamp - estimator->ObservationTimestamp) > 0.1)
       estimator->StateUpdateTimestamp = estimator->ObservationTimestamp;
     else if(estimator->StateUpdateTimestamp != estimator->ObservationTimestamp)

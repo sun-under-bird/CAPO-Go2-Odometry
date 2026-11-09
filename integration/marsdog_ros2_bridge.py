@@ -24,7 +24,7 @@ class MarsdogBridge(Node):
     def __init__(self, args):
         super().__init__("marsdog_capo_sim_bridge")
         self.args = args
-        sdk, config, self.model, self.names, self.act, self.qadr, self.dadr = load_sdk(args.sdk)
+        sdk, config, self.model, self.names, self.act, self.qadr, self.dadr = load_sdk(args.sdk, args.urdf)
         self.actor = sdk.Actor(config, args.sdk / "sim/policy/policy.onnx")
         self.dt = float(self.model.opt.timestep)
         self.decimation = round(config["policy_dt"] / self.dt)
@@ -281,6 +281,7 @@ class MarsdogBridge(Node):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk", type=Path, required=True)
+    parser.add_argument("--urdf", type=Path)
     parser.add_argument("--scenario", choices=["stand", "straight", "turn", "square"], required=True)
     for name, default in [("duration", 20.), ("warmup", 4.), ("vx", .25), ("wz", .3),
                           ("initial-yaw", .7), ("foot-threshold", -8.), ("side-length", 10.), ("square-timeout", 0.)]:

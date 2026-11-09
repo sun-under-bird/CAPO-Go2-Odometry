@@ -15,7 +15,7 @@ SLOTS = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14, 3, 7]
 DEFAULT_SDK = Path("/home/sunbird/Marsdog_V1.7_Roll2100_SLAM_SDK_v0.2.0")
 
 
-def load_sdk(directory):
+def load_sdk(directory, urdf=None):
     directory = Path(directory).resolve()
     if sys.version_info[:2] not in ((3, 10), (3, 12)):
         raise RuntimeError("Delivered controller requires CPython 3.10 or 3.12")
@@ -32,6 +32,9 @@ def load_sdk(directory):
     model, names, actuators, qadr, dadr = module.build(directory / "sim/scene/scene.xml", config)
     if len(names) != 14 or len(set(names)) != 14:
         raise ValueError("Expected 14 distinct Marsdog joints")
+    if urdf is not None:
+        from marsdog_urdf import build_urdf
+        model, actuators, qadr, dadr = build_urdf(urdf, model, names)
     return module, config, model, list(names), np.array(actuators), np.array(qadr), np.array(dadr)
 
 

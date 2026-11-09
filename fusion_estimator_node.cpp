@@ -94,6 +94,12 @@ public:
                 this->get_parameter("robot_mass_kg").as_double(),
                 this->get_parameter("gravity_m_s2").as_double(),
                 this->get_parameter("imu_position_body").as_double_array());
+            bool angular_compensation, rolling_compensation, contact_weighting, timestamp_prediction;
+            this->get_parameter_or("point_angular_compensation", angular_compensation, true);
+            this->get_parameter_or("point_rolling_compensation", rolling_compensation, true);
+            this->get_parameter_or("point_contact_weighting", contact_weighting, true);
+            this->get_parameter_or("point_timestamp_prediction", timestamp_prediction, true);
+            fe_.configure_point_observations(angular_compensation, rolling_compensation, contact_weighting, timestamp_prediction);
             input_joint_names = this->get_parameter("joint_names").as_string_array();
             input_joint_slots = this->get_parameter("joint_slots").as_integer_array();
             if (input_joint_names.size() != 14 || input_joint_slots.size() != 14)

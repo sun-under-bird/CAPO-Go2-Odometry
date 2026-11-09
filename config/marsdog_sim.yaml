@@ -22,5 +22,9 @@ fusion_estimator_node:
     foot_force_threshold: -8.0
     min_stair_height: 0.04
     synchronize_joint_imu: true
+    point_angular_compensation: true
+    point_rolling_compensation: true
+    point_contact_weighting: true
+    point_timestamp_prediction: true
     # The runner supplies chain_*, foot_radii, mass, IMU offset and joint mapping
     # from the exact compiled simulation model. This template alone is incomplete.

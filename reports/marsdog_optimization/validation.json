@@ -1,0 +1,113 @@
+{
+  "controlled_scenarios": [
+    {
+      "scenario": "静止",
+      "baseline": "measured-baseline-validated/stand",
+      "optimized": "measured-final/stand",
+      "identical_input_sha256": "fdd75927ba93fc8ddd3bd659a9867cfdab50c355658c69730c425511f5c09e34",
+      "actual_path_m": 0.1118538846410009,
+      "baseline_endpoint_m": 0.003559747395848608,
+      "optimized_endpoint_m": 0.0022773336630099858,
+      "baseline_position_rmse_m": 0.003272608682458599,
+      "optimized_position_rmse_m": 0.0021904057476821704,
+      "optimized_endpoint_percent_of_path": 2.0359897828485534
+    },
+    {
+      "scenario": "前进 0.15 m/s",
+      "baseline": "speed015-baseline/straight",
+      "optimized": "speed015-final/straight",
+      "identical_input_sha256": "328ef66f7ae20031680764b991bac0d093f16a8bef4941b7d8195c37e2bdc38c",
+      "actual_path_m": 4.300184144920325,
+      "baseline_endpoint_m": 0.2577823988232048,
+      "optimized_endpoint_m": 0.060078155164596206,
+      "baseline_position_rmse_m": 0.14729713111678042,
+      "optimized_position_rmse_m": 0.03622716764217256,
+      "optimized_endpoint_percent_of_path": 1.397106568926
+    },
+    {
+      "scenario": "前进 0.25 m/s",
+      "baseline": "measured-baseline-validated/straight",
+      "optimized": "measured-final/straight",
+      "identical_input_sha256": "de3ea888da3afda67ac348b7566a1466044bdf2f8cd0bf97c73792b7b048e7fd",
+      "actual_path_m": 7.214662158803805,
+      "baseline_endpoint_m": 0.3884761648834147,
+      "optimized_endpoint_m": 0.1151945662951498,
+      "baseline_position_rmse_m": 0.22267530460446583,
+      "optimized_position_rmse_m": 0.06754244053814187,
+      "optimized_endpoint_percent_of_path": 1.5966730494037316
+    },
+    {
+      "scenario": "前进 0.35 m/s",
+      "baseline": "speed035-baseline/straight",
+      "optimized": "speed035-final/straight",
+      "identical_input_sha256": "3856f90a6f2b989aa9a1500ca8db241fd6b41bde4fc9206ba207137e8dd05ae2",
+      "actual_path_m": 9.651175422996598,
+      "baseline_endpoint_m": 0.5015106479047718,
+      "optimized_endpoint_m": 0.17096634119595028,
+      "baseline_position_rmse_m": 0.28443328582190935,
+      "optimized_position_rmse_m": 0.1006071172079181,
+      "optimized_endpoint_percent_of_path": 1.7714561564032463
+    },
+    {
+      "scenario": "倒退 −0.20 m/s",
+      "baseline": "reverse-baseline/straight",
+      "optimized": "reverse-final/straight",
+      "identical_input_sha256": "5e6099f35a15df117d366a9c6c68eb4e1d9dcfe821c2ec5c60893a515daa88e6",
+      "actual_path_m": 4.025001447245504,
+      "baseline_endpoint_m": 0.18060039515204843,
+      "optimized_endpoint_m": 0.03993597461323851,
+      "baseline_position_rmse_m": 0.10190299624928086,
+      "optimized_position_rmse_m": 0.023773236281774524,
+      "optimized_endpoint_percent_of_path": 0.9921977702782829
+    },
+    {
+      "scenario": "转向 0.30 rad/s",
+      "baseline": "measured-baseline-validated/turn",
+      "optimized": "measured-final/turn",
+      "identical_input_sha256": "777736a4751af606174d3840c421eeec46a26211a0abbd91fc633906ccc86cfd",
+      "actual_path_m": 0.9947661379028783,
+      "baseline_endpoint_m": 0.03282706268060239,
+      "optimized_endpoint_m": 0.021168228979687828,
+      "baseline_position_rmse_m": 0.037660730871687406,
+      "optimized_position_rmse_m": 0.031002145245643774,
+      "optimized_endpoint_percent_of_path": 2.1279603489835055
+    }
+  ],
+  "straight_ablation": [
+    {
+      "change": "基线",
+      "directory": "measured-baseline-validated/straight",
+      "endpoint_error_m": 0.3884761648834147,
+      "position_rmse_m": 0.22267530460446583,
+      "velocity_rmse_m_s": 0.06541798436537725
+    },
+    {
+      "change": "加机身角速度",
+      "directory": "measured-angular/straight",
+      "endpoint_error_m": 0.3706232038450524,
+      "position_rmse_m": 0.21222039953476018,
+      "velocity_rmse_m_s": 0.05623231861021058
+    },
+    {
+      "change": "再加脚掌滚动",
+      "directory": "measured-motion/straight",
+      "endpoint_error_m": 0.2788467147796147,
+      "position_rmse_m": 0.1610213815257095,
+      "velocity_rmse_m_s": 0.056232297022267334
+    },
+    {
+      "change": "再加接触加权",
+      "directory": "measured-optimized/straight",
+      "endpoint_error_m": 0.26808878577883555,
+      "position_rmse_m": 0.15521990409736844,
+      "velocity_rmse_m_s": 0.013614189631411703
+    },
+    {
+      "change": "再修正预测时间间隔",
+      "directory": "measured-final/straight",
+      "endpoint_error_m": 0.1151945662951498,
+      "position_rmse_m": 0.06754244053814187,
+      "velocity_rmse_m_s": 0.012745038147203158
+    }
+  ]
+}

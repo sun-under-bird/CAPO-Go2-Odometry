@@ -6,6 +6,9 @@ namespace DataFusion
     {
         int i, LegNumber;
         ObservationTime = Time;
+        PointSampleDt = PointLastTimestamp < 0 ? 0.0 : Time - PointLastTimestamp;
+        if (!(PointSampleDt > 0 && PointSampleDt < 0.1)) PointSampleDt = 0.0;
+        PointLastTimestamp = Time;
         
         for(i = 0; i < StateSpaceModel->Nz99; i++)
             Observation[i] = 0;
@@ -137,7 +140,12 @@ namespace DataFusion
     void SensorLegsPos::Joint2HipFoot(double *Message, int LegNumber)
     {
         if (ConfiguredPointChain[LegNumber]) {
-            const auto result = PointChains[LegNumber].compute(Message, Est_Quaternion);
+            const auto result = PointChains[LegNumber].compute(Message, Est_Quaternion,
+                PointBodyAngularVelocityEnable ? PointBodyAngularVelocity : nullptr);
+            for (int a = 0; a < 3; ++a) {
+                PointPreviousRollingVelocity[LegNumber][a] = PointRollingVelocity[LegNumber][a];
+                PointRollingVelocity[LegNumber][a] = result.rolling_velocity[a];
+            }
             for (int n = 0; n < 4; ++n)
                 for (int a = 0; a < 3; ++a) {
                     JointsBodyWFPosition[LegNumber][n][a] = result.positions[n][a];
@@ -398,7 +406,7 @@ namespace DataFusion
     void SensorLegsPos::FootFallPositionRecordFun(double *Message){
 
         double p_sum[3] = {0}, v_sum[3] = {0};
-        int    leg_cnt = 0;
+        double weight_sum = 0.0;
 
         double body_rpy[3] = {0.0, 0.0, 0.0};
         array_quaternion_to_eulerZYX(Est_Quaternion, body_rpy);
@@ -419,6 +427,7 @@ namespace DataFusion
         {
             if (!FootIsOnGround[LegNumber])
                 continue;
+            const bool new_contact = !FootfallPositionRecordIsInitiated[LegNumber] || FootLanding[LegNumber];
             if(!FootfallPositionRecordIsInitiated[LegNumber])
             {
                 FootfallPositionRecordIsInitiated[LegNumber] = true;
@@ -522,6 +531,11 @@ namespace DataFusion
             FootfallVelocityRecordTemp[LegNumber][0] = -FootBodyVel_WF[LegNumber][0] + WheelVel * move_dir_x;
             FootfallVelocityRecordTemp[LegNumber][1] = -FootBodyVel_WF[LegNumber][1] + WheelVel * move_dir_y;
             FootfallVelocityRecordTemp[LegNumber][2] = -FootBodyVel_WF[LegNumber][2] + WheelVel * move_dir_z;
+            if (ConfiguredPointChain[LegNumber] && PointRollingContactEnable && !new_contact) {
+                for (int a = 0; a < 2; ++a)
+                    FootfallPositionRecordTemp[LegNumber][a] += 0.5 * PointSampleDt *
+                        (PointPreviousRollingVelocity[LegNumber][a] + PointRollingVelocity[LegNumber][a]);
+            }
             FootIsOnGroundTemp[LegNumber] = true;
 
         }
@@ -562,25 +576,35 @@ namespace DataFusion
             FootfallPositionRecord[LegNumber][2] = FootfallPositionRecordTemp[LegNumber][2];
 
             if (!FootIsOnGroundTemp[LegNumber]) continue;
-            p_sum[0] += FootfallPositionRecordTemp[LegNumber][0] - JointsBodyWFPosition[LegNumber][FootNodeIndex][0];
-            p_sum[1] += FootfallPositionRecordTemp[LegNumber][1] - JointsBodyWFPosition[LegNumber][FootNodeIndex][1];
-            p_sum[2] += FootfallPositionRecordTemp[LegNumber][2] - JointsBodyWFPosition[LegNumber][FootNodeIndex][2];
-            v_sum[0] += FootfallVelocityRecordTemp[LegNumber][0];
-            v_sum[1] += FootfallVelocityRecordTemp[LegNumber][1];
-            v_sum[2] += FootfallVelocityRecordTemp[LegNumber][2];
-            leg_cnt++;
+            double weight = 1.0;
+            if (ConfiguredPointChain[LegNumber] && PointContactWeightingEnable) {
+                // Raw actuator torque also contains leg inertia. Contacts barely
+                // above threshold and inconsistent horizontal velocities are weak
+                // observations, rather than equal votes in the support average.
+                const double load = -JointsBodyWFEffort[LegNumber][FootNodeIndex][2];
+                const double threshold = std::max(1e-3, -FootEffortThreshold);
+                weight = std::max(0.02, std::min(1.0, (load - threshold) / (2.0 * threshold)));
+                const double dx = FootfallVelocityRecordTemp[LegNumber][0] - StateSpaceModel->EstimatedState99[1];
+                const double dy = FootfallVelocityRecordTemp[LegNumber][1] - StateSpaceModel->EstimatedState99[4];
+                weight /= 1.0 + (dx*dx + dy*dy) / (0.15 * 0.15);
+            }
+            for (int a = 0; a < 3; ++a) {
+                p_sum[a] += weight * (FootfallPositionRecordTemp[LegNumber][a] - JointsBodyWFPosition[LegNumber][FootNodeIndex][a]);
+                v_sum[a] += weight * FootfallVelocityRecordTemp[LegNumber][a];
+            }
+            weight_sum += weight;
         }
 
-        if (leg_cnt == 0)
+        if (weight_sum <= 0)
             FootFallPositionAvailable = false;
         else{
             FootFallPositionAvailable = true;
-            Observation[0] = p_sum[0] / (double)leg_cnt;
-            Observation[3] = p_sum[1] / (double)leg_cnt;
-            Observation[6] = p_sum[2] / (double)leg_cnt;
-            Observation[1] = v_sum[0] / (double)leg_cnt;
-            Observation[4] = v_sum[1] / (double)leg_cnt;
-            Observation[7] = v_sum[2] / (double)leg_cnt;
+            Observation[0] = p_sum[0] / weight_sum;
+            Observation[3] = p_sum[1] / weight_sum;
+            Observation[6] = p_sum[2] / weight_sum;
+            Observation[1] = v_sum[0] / weight_sum;
+            Observation[4] = v_sum[1] / weight_sum;
+            Observation[7] = v_sum[2] / weight_sum;
             for (int LegNumber = 0; LegNumber < ContactChainNum; ++LegNumber)
             {
                 Observation[2] -= JointsBodyWFEffort[LegNumber][FootNodeIndex][0] / TimelyWeight;

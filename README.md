@@ -52,6 +52,8 @@ scripts/run_marsdog_sim.sh --scenario straight --duration 30 --viewer --realtime
 
 本机运行条件、话题、仿真假设与 30 秒结果见 [Marsdog 适配说明](MARSDOG_SIM_ADAPTATION.md)。
 
+当前默认使用新实测 URDF 与原 SDK 策略，已修正机身角速度、球形脚滚动和预测时间间隔，并对支撑脚观测加权。新模型的十米方形位置 RMSE 从 0.538 m 降到 0.150 m，见 [优化结果与复现](MARSDOG_OPTIMIZATION.md)。
+
 ## 编译
 
 ```bash

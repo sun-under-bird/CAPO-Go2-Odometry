@@ -1,0 +1,86 @@
+{
+  "date": "2026-11-09",
+  "baseline": "/home/sunbird/CAPO-Go2-Odometry/.runtime/marsdog/measured-square-baseline/square",
+  "optimized": "/home/sunbird/CAPO-Go2-Odometry/.runtime/marsdog/measured-square-final/square",
+  "identical_sensor_input_sha256": "55f2995d322c3b610f7026a205158b22606a7d4ab2fd4e5b8a5ab8c94a1e93aa",
+  "actual_path_m": 40.64127710053339,
+  "frames": 98090,
+  "metrics": {
+    "position_rmse_m": {
+      "baseline": 0.5381401433614252,
+      "optimized": 0.15033270334313512,
+      "reduction_percent": 72.06439526995688
+    },
+    "max_position_error_m": {
+      "baseline": 0.8173631977794328,
+      "optimized": 0.2367170078433854,
+      "reduction_percent": 71.03894468377277
+    },
+    "endpoint_error_m": {
+      "baseline": 0.05230516673473871,
+      "optimized": 0.05600671758042507,
+      "reduction_percent": -7.0768359547699555
+    },
+    "velocity_rmse_m_s": {
+      "baseline": 0.06307167854140167,
+      "optimized": 0.012856157368579044,
+      "reduction_percent": 79.61659231862686
+    },
+    "yaw_rmse_deg": {
+      "baseline": 0.013746068353547558,
+      "optimized": 0.0008499479449669237,
+      "reduction_percent": 93.8167923866931
+    },
+    "height_rmse_m": {
+      "baseline": 0.009449477149666713,
+      "optimized": 0.009494780686743021,
+      "reduction_percent": -0.4794290346308294
+    }
+  },
+  "sides": {
+    "baseline": [
+      {
+        "actual_m": 9.987257427708819,
+        "estimated_m": 9.439487666216978,
+        "signed_distance_error_percent": -5.484686516361329
+      },
+      {
+        "actual_m": 9.986478869624648,
+        "estimated_m": 9.403497114724457,
+        "signed_distance_error_percent": -5.837710793875665
+      },
+      {
+        "actual_m": 9.98672657576056,
+        "estimated_m": 9.384321313571434,
+        "signed_distance_error_percent": -6.032059230011002
+      },
+      {
+        "actual_m": 9.973418164251507,
+        "estimated_m": 9.377950271886785,
+        "signed_distance_error_percent": -5.970549740901303
+      }
+    ],
+    "optimized": [
+      {
+        "actual_m": 9.987257427708819,
+        "estimated_m": 10.121995438483124,
+        "signed_distance_error_percent": 1.3490992071605676
+      },
+      {
+        "actual_m": 9.986478869624648,
+        "estimated_m": 10.092390163120438,
+        "signed_distance_error_percent": 1.060546914267601
+      },
+      {
+        "actual_m": 9.98672657576056,
+        "estimated_m": 10.068651840632114,
+        "signed_distance_error_percent": 0.8203415228209034
+      },
+      {
+        "actual_m": 9.973418164251507,
+        "estimated_m": 10.05977395603164,
+        "signed_distance_error_percent": 0.8658595313857794
+      }
+    ]
+  }
+}

@@ -15,7 +15,7 @@ public:
     using Mat = std::array<Vec, 3>;
     struct Result {
         std::array<Vec, 4> positions{}; // hip, thigh, calf, contact (legacy ABI)
-        Vec velocity{}, force{};
+        Vec velocity{}, force{}, rolling_velocity{};
     };
 
     // Per node: motor slot, axis (-1 fixed, 0 X, 1 Y, 2 Z), use torque,
@@ -56,9 +56,15 @@ public:
         radius_ = radius;
     }
 
-    Result compute(const double* message, const double* quaternion) const {
+    // body_omega is expressed in base axes. velocity excludes base translation
+    // but includes base rotation; rolling_velocity moves the sphere's geometric
+    // bottom across flat ground when its instantaneous material point sticks.
+    Result compute(const double* message, const double* quaternion,
+                   const double* body_omega = nullptr) const {
         Result out;
         Mat rotation = quat(quaternion);
+        Vec angular{};
+        if (body_omega) angular = multiply(rotation, Vec{body_omega[0], body_omega[1], body_omega[2]});
         Vec position{};
         struct Joint { Vec origin, axis; int slot; bool force; };
         std::vector<Joint> joints;
@@ -79,12 +85,14 @@ public:
         // in world axes. Radius is model geometry, never a contact measurement.
         position[2] -= radius_;
         out.positions[3] = position;
+        out.velocity = cross(angular, position);
         Mat normal{};
         Vec rhs{};
         for (const auto& j : joints) {
             const Vec column = cross(j.axis, subtract(position, j.origin));
             for (int a = 0; a < 3; ++a) {
                 out.velocity[a] += column[a] * message[16+j.slot];
+                angular[a] += j.axis[a] * message[16+j.slot];
                 if (!j.force) continue;
                 rhs[a] += column[a] * message[32+j.slot];
                 for (int b = 0; b < 3; ++b) normal[a][b] += column[a]*column[b];
@@ -93,6 +101,7 @@ public:
         // Damped least squares remains finite near a straight-leg singularity.
         for (int a = 0; a < 3; ++a) normal[a][a] += 1e-8;
         out.force = solve(normal, rhs);
+        out.rolling_velocity = {radius_*angular[1], -radius_*angular[0], 0.0};
         return out;
     }
 

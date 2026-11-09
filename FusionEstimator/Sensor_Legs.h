@@ -45,6 +45,12 @@ namespace DataFusion
     bool ConfiguredPointChain[4] = {false, false, false, false};
     PointLegKinematics PointChains[4];
     void UpdateContactState(int leg);
+    bool PointBodyAngularVelocityEnable = true;
+    bool PointRollingContactEnable = true;
+    bool PointContactWeightingEnable = false;
+    double PointBodyAngularVelocity[3] = {};
+    double PointRollingVelocity[4][3] = {}, PointPreviousRollingVelocity[4][3] = {};
+    double PointLastTimestamp = -1.0, PointSampleDt = 0.0;
     double GravityMagnitude = 9.79;
     bool JointsXYZAccelerationEnable = true;
     bool JointsXYZEnable = true;

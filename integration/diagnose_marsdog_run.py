@@ -1,12 +1,13 @@
 """Offline diagnosis using recorded ground truth; never feeds the estimator.
 
-Compare the current joint-only velocity observation with the complete rigid
+Compare the legacy joint-only velocity observation with the complete rigid
 body velocity, and distinguish a rolling sphere's geometric bottom from its
 instantaneous material contact point. Contact labels below are reconstructed
 from recorded poses and collision geometry, not force-sensor measurements.
 """
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 
@@ -39,6 +40,16 @@ def main():
     directory = args.directory.resolve()
     summary = json.loads((directory / "summary.json").read_text())
     _, _, model, names, _, qadr, dadr = load_sdk(args.sdk)
+    # Replay the actual compiled model when available, even if source files or
+    # the default URDF change after this experiment was recorded.
+    model_path = directory / "model.mjb"
+    if model_path.is_file():
+        manifest = json.loads((directory / "provenance.json").read_text())
+        if hashlib.sha256(model_path.read_bytes()).hexdigest() != manifest["compiled_model_sha256"]:
+            raise ValueError("Recorded model checksum mismatch")
+        model = mujoco.MjModel.from_binary_path(str(model_path))
+        joints = [model.joint(name).id for name in names]
+        qadr, dadr = model.jnt_qposadr[joints], model.jnt_dofadr[joints]
     inputs = columns(directory / "inputs.csv", ["stamp_ns"] +
                      [name+suffix for suffix in (".q_rad", ".dq_rad_s") for name in names] +
                      ["imu_quat_"+axis for axis in "wxyz"] +

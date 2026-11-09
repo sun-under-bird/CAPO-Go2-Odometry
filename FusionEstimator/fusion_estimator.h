@@ -340,6 +340,14 @@ public:
         point_robot = true;
     }
 
+    void configure_point_observations(bool angular, bool rolling, bool contact_weighting, bool timestamp_prediction) {
+        for (auto* sensor : sensors)
+            sensor->Int_Par[ESTIMATOR_PARAM_TIMESTAMP_TRANSITION] = timestamp_prediction ? 1 : 0;
+        legs_pos->PointBodyAngularVelocityEnable = angular;
+        legs_pos->PointRollingContactEnable = rolling;
+        legs_pos->PointContactWeightingEnable = contact_weighting;
+    }
+
     Proprioception fusion_estimator(const IMU& imu, const MotorState (&motorState)[MOTOR_NUM])
     {
         Proprioception proprio;
@@ -436,6 +444,9 @@ public:
 
             if (Signal_Available_Check(joint,2)) {
 
+                if (point_robot)
+                    for (int a = 0; a < 3; ++a)
+                        legs_pos->PointBodyAngularVelocity[a] = imu_gyro->IMUGyroEnable ? imu.gyroscope[a] : 0.0;
                 legs_pos->SensorDataHandle(joint, UsedTimestamp);
 
                 if(legs_pos->CalculateWeightEnable)

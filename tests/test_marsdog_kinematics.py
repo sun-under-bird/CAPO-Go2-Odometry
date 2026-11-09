@@ -26,16 +26,47 @@ class MarsdogKinematicsTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls): cls.temp.cleanup()
 
-    def evaluate(self, cases, radii):
+    def evaluate(self, cases, radii, motion=False):
         tokens = []
         for leg, radius in zip(LEGS, radii):
             chain = self.geometry["chain_"+leg]
             tokens.extend([len(chain)//9, radius, *chain])
         tokens.append(len(cases))
-        for message, quaternion in cases: tokens.extend([*message, *quaternion])
-        result = subprocess.run([str(self.probe)], input=" ".join(map(str, tokens)),
+        for case in cases:
+            for vector in case: tokens.extend(vector)
+        command = [str(self.probe)] + (["--motion"] if motion else [])
+        result = subprocess.run(command, input=" ".join(map(str, tokens)),
                                 text=True, capture_output=True, check=True)
-        return np.fromstring(result.stdout, sep=" ").reshape(len(cases), 4, 3, 3)
+        return np.fromstring(result.stdout, sep=" ").reshape(len(cases), 4, 4 if motion else 3, 3)
+
+    def test_body_rotation_and_rolling_foot_velocity(self):
+        rng = np.random.default_rng(91)
+        cases, expected_velocity, expected_roll = [], [], []
+        radii = self.geometry["foot_radii"]
+        for _ in range(80):
+            data = mujoco.MjData(self.model)
+            quat = rng.normal(size=4); quat /= np.linalg.norm(quat)
+            q = np.r_[self.policy["default_joint_pos"], .2, .1] + rng.uniform(-.1, .1, 14)
+            dq, omega = rng.uniform(-1, 1, 14), rng.uniform(-1, 1, 3)
+            data.qpos[:3], data.qpos[3:7], data.qpos[self.qadr] = [1, -.5, .8], quat, q
+            data.qvel[3:6], data.qvel[self.dadr] = omega, dq
+            mujoco.mj_forward(self.model, data)
+            message = np.zeros(48); message[SLOTS] = q; message[np.array(SLOTS)+16] = dq
+            velocity, rolling = [], []
+            for i, leg in enumerate(LEGS):
+                geom = self.model.geom(leg+"_foot_collision_0").id
+                center = data.geom_xpos[geom].copy(); point = center.copy(); point[2] -= radii[i]
+                jac, angular = np.zeros((3, self.model.nv)), np.zeros((3, self.model.nv))
+                body = int(self.model.geom_bodyid[geom])
+                mujoco.mj_jac(self.model, data, jac, angular, point, body)
+                material_velocity = jac @ data.qvel
+                velocity.append(material_velocity)
+                mujoco.mj_jac(self.model, data, jac, angular, center, body)
+                rolling.append(jac @ data.qvel-material_velocity)
+            cases.append((message, quat, omega)); expected_velocity.append(velocity); expected_roll.append(rolling)
+        actual = self.evaluate(cases, radii, motion=True)
+        np.testing.assert_allclose(actual[:, :, 1], expected_velocity, atol=2e-10)
+        np.testing.assert_allclose(actual[:, :, 3], expected_roll, atol=2e-10)
 
     def test_positions_velocities_and_force_with_moving_waist(self):
         rng = np.random.default_rng(38)
